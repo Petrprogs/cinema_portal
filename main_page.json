@@ -1,0 +1,27 @@
+{
+    "fxml": "This page contains FXML code! Open it in the Fork browser or any other browser that supports FXML code.",
+    "title": "HDrezka - Главная",
+    "icon": "http:\/\/fxmlparsers.in.net\/\/icons\/rezka.png",
+    "channels": [
+        {
+            "title": "\u041f\u043e\u0438\u0441\u043a",
+            "logo_30x30": "http://94.177.51.191/res/?res=search.png",
+            "description": "Поиск по Кинопоиск. Источники потоков: TurboCDN, Vibix, HdRezka",
+            "value": "",
+            "search_on": "search_on",
+            "playlist_url": "http://94.177.51.191/turbo/search/"
+        },
+        {
+            "title": "Избранное",
+            "logo_30x30": "http://94.177.51.191/res/?res=bookmark.png",
+            "description": "Ваше избранное",
+            "playlist_url": "http://94.177.51.191/bookmarks/"
+        }
+    ],
+    "cachetime": "7200",
+    "cacheinfo": "FROMCACHE",
+    "align": "center",
+    "color": "#cccccc",
+    "background": "#313131",
+    "is_iptv": "0"
+}
