@@ -4,7 +4,10 @@ import json
 import re
 import base64
 from urllib.parse import unquote
-import demjson3
+try:
+    import demjson3
+except:
+    import demjson as demjson3
 
 class VibixApi():
     def __init__(self, iframe_url=None):
