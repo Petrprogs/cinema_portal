@@ -8,7 +8,7 @@ class SoundCloudApi():
         self.HEADERS = {
             'Host': 'api-v2.soundcloud.com',
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0',       
-            'Authorization': 'OAuth 2-298622-1481024943-A1yyuGAL6lhAP',
+            'Authorization': 'OAuth secret-here',
         }
 
     def __request(self, url, params):
