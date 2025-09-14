@@ -71,7 +71,7 @@ class VideoBalancersApi():
         }
         
         response = requests.post(
-            f"{API_BASE_URL}/cache", data=data, verify=False, proxies={"https": "http://rezka_proxy:x7PRCFEFvP7i@89.169.4.214:3020", "http": "http://rezka_proxy:x7PRCFEFvP7i@89.169.4.214:3020"})
+            f"{API_BASE_URL}/cache", data=data, verify=False)
         if response.status_code == 200:
             response_json = response.json()
             return response_json
