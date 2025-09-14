@@ -68,13 +68,14 @@ def create_channel_item(title, icon, description=None, playlist_url=None, menu=N
     item = {
         "title": title,
         "logo_30x30": icon,
-        "description": description,
-        "playlist_url": playlist_url
+        "description": description
     }
     if menu:
         item["menu"] = menu
     if parser:
         item["parser"] = parser
+    if playlist_url:
+        item["playlist_url"] = playlist_url
     if stream_url:
         item["stream_url"] = stream_url
     if subtitles:
@@ -149,7 +150,10 @@ def start_ffmpeg(mp4_url, origin="", referer="", proxy=""):
 @app.route("/")
 @auth_required
 def main_page():
-    return jsonify(load_json("main_page.json"))
+    index_page = load_json("main_page.json")
+    for channel in index_page["channels"]:
+        channel["playlist_url"] = channel["playlist_url"].replace("http://94.177.51.191/", request.host_url)
+    return jsonify(index_page)
 
 @app.route("/bookmarks/", strict_slashes=False)
 @auth_required
@@ -464,7 +468,6 @@ def handle_turbo_cdn(response_template, cdn_name):
     app_state["balancers_api"] = VideoBalancersApi.VideoBalancersApi(
         kp_id
     ).get_provider(cdn_name, query_params)
-    print(app_state["balancers_api"])
     if cdn_name == "hdRezka":
         return redirect(f"{BASE_URL}/process_item?url={app_state['balancers_api'].url}", 302)
     
@@ -475,7 +478,7 @@ def handle_turbo_cdn(response_template, cdn_name):
                 response_template["channels"].append(create_channel_item(
                     title=season,
                     icon=f"{ICON_BASE_URL}film.png",
-                    playlist_url=f"{request.url}&s={season.split(' ')[0]}"
+                    playlist_url=f"{request.url}&s={season.split(' ')[0] if season.split(' ')[0].isdigit() else season.split(' ')[1]}"
                 ))
             return jsonify(response_template)
     
@@ -548,7 +551,7 @@ def handle_turbo_season(response_template, kp_id, season):
     watched_db = load_json("db.json")
     
     for episode in episodes:
-        ep_num = episode.split(" ")[0]
+        ep_num = episode.split(" ")[0] if episode.split(" ")[0].isdigit() else episode.split(" ")[1]
         is_watched = any(
             item for item in watched_db["watched"]
             if (item["url"] == request.url.split("&")[0] and
@@ -573,7 +576,6 @@ def handle_turbo_episode(response_template, kp_id, season, episode):
             request.args.get("source"))
     
     translations = app_state["balancers_api"].getTranslations(int(season), int(episode))
-    print(translations)
     for translation in translations:
         response_template["channels"].append(create_channel_item(
             title=translation,
@@ -593,7 +595,7 @@ def handle_turbo_series_translation(response_template, kp_id, season, episode, t
         response_template["channels"].append(create_channel_item(
             title=f"{quality}",
             icon=f"{ICON_BASE_URL}film.png",
-            stream_url=f"{request.host_url}turbo/redir?url={stream_url}"
+            stream_url=f"{request.host_url}turbo/redir?url={stream_url.replace('https','http')}"
         ))
         
         if quality in ("1080p", "720p", "1080", "720"):

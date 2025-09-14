@@ -67,18 +67,11 @@ class VideoBalancersApi():
 
     def get_iframes(self, kp_id):
         data = {
-            'kinopoisk': str(kp_id),
-            'tv': '1',
-            'resize': '1',
-            'player': ','.join([f'kodik{i}' for i in range(1, 51)] + ['turbo', 'alloha', 'collaps', 'militorys', 'videocdn', 'hdvb', 'cdnmovies', 'vibix', 'videoseed', 'hdrezkauhd0', 'hdrezkauhd1', 'hdrezkauhd2', 'hdrezkauhd3', 'hdrezkauhd4', 'hdrezkauhd5', 'hdrezkauhd6', 'hdrezkauhd7', 'hdrezkauhd8', 'hdrezka']),
-            'code': '31',
-            'button_limit': '50',
-            'button_size': '1',
-            'separator': ',',
+            'kinopoisk': str(kp_id)
         }
         
         response = requests.post(
-            f"{API_BASE_URL}/cache", data=data, verify=False)
+            f"{API_BASE_URL}/cache", data=data, verify=False, proxies={"https": "http://rezka_proxy:x7PRCFEFvP7i@89.169.4.214:3020", "http": "http://rezka_proxy:x7PRCFEFvP7i@89.169.4.214:3020"})
         if response.status_code == 200:
             response_json = response.json()
             return response_json
