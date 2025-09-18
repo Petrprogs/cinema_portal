@@ -2,8 +2,6 @@ import traceback
 import requests
 from bs4 import BeautifulSoup
 import json
-import re
-import base64
 import os
 from urllib.parse import unquote
 from videobalancers import TurboApi, VibixApi, HdRezkaApi
@@ -74,6 +72,7 @@ class VideoBalancersApi():
             f"{API_BASE_URL}/cache", data=data, verify=False)
         if response.status_code == 200:
             response_json = response.json()
+            print(response_json)
             return response_json
 
     def get_providers(self, search_data):

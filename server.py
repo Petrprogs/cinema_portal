@@ -63,6 +63,33 @@ def auth_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def clean_url_from_unwanted_params(url):
+    """Remove unwanted query parameters from URL."""
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    
+    # Parameters to remove
+    unwanted_params = ['box_client', 'box_mac', 'initial', 'platform', 'country', 'tvp', 'hw']
+    
+    parsed = urlparse(url)
+    query_params = parse_qs(parsed.query)
+    
+    # Remove unwanted parameters
+    for param in unwanted_params:
+        query_params.pop(param, None)
+    
+    # Rebuild query string
+    new_query = urlencode(query_params, doseq=True)
+    
+    # Reconstruct URL
+    return urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        parsed.params,
+        new_query,
+        parsed.fragment
+    ))
+
 def create_channel_item(title, icon, description=None, playlist_url=None, menu=None, parser=None, stream_url=None, subtitles=None):
     """Create a standardized channel item dictionary."""
     item = {
@@ -81,28 +108,6 @@ def create_channel_item(title, icon, description=None, playlist_url=None, menu=N
     if subtitles:
         item["subtitles"] = subtitles
     return item
-
-def append_to_feed_response(item, feed_response):
-    """Append item data to feed response channels."""
-    description = f"""
-    <img style="float: left; padding-right: 15px" src="{item["poster"]}">
-    <table cellspacing="10"><tr<td>
-    <p>{item["genres"]}<br>{item["artists"]}<br>
-    {item["year"]}<br>{item["country"]}<br>Цензор: <b>{item["censor"]}</b><br>
-    {item["ratings"]}<br><br>{item["description"]}</p>
-    </td></tr></table>
-    """
-    
-    feed_response["channels"].append(create_channel_item(
-        title=item["title"],
-        icon=get_icon(item["item_type"]),
-        description=description,
-        playlist_url=f"{BASE_URL}/process_item?url={item['url']}",
-        menu=[{
-            "title": "В избранное", 
-            "playlist_url": f"{BASE_URL}/add_to_fav?url={item['url']}&return={request.url}"
-        }]
-    ))
 
 def initialize_ffmpeg(stream_url, origin="", referer="", proxy=""):
     """Initialize the FFmpeg process before the first request."""
@@ -407,7 +412,7 @@ def turbo_search():
             playlist_url=f"{request.host_url}turbo/process_item?id={item['id']}",  # No title in URL
             menu=[{
                 "title": "В избранное", 
-                "playlist_url": f"{BASE_URL}/add_to_fav?url={request.host_url}turbo/process_item?id={item['id']}"
+                "playlist_url": f"{request.host_url}add_to_fav?url={request.host_url}turbo/process_item?id={item['id']}"
             }]
         ))
     
@@ -478,7 +483,7 @@ def handle_turbo_cdn(response_template, cdn_name):
                 response_template["channels"].append(create_channel_item(
                     title=season,
                     icon=f"{ICON_BASE_URL}film.png",
-                    playlist_url=f"{request.url}&s={season.split(' ')[0] if season.split(' ')[0].isdigit() else season.split(' ')[1]}"
+                    playlist_url=f"{clean_url_from_unwanted_params(request.url)}&s={season.split(' ')[0] if season.split(' ')[0].isdigit() else season.split(' ')[1]}"
                 ))
             return jsonify(response_template)
     
@@ -486,17 +491,18 @@ def handle_turbo_cdn(response_template, cdn_name):
     watched_db = load_json("db.json")
     
     for i, translation in enumerate(translations):
+        clean_url = clean_url_from_unwanted_params(request.url)
         is_watched = any(
             not ("season" in watched and "episode" in watched)
             for watched in watched_db["watched"]
-            if watched["url"] == request.url.split("&")[0]
+            if watched["url"] == clean_url.split("&")[0]
         )
         
         response_template["channels"].append(create_channel_item(
             title=f"<s>{translation}</s>" if is_watched else translation,
             icon=f"{ICON_BASE_URL}film.png",
-            parser=f"{request.host_url}mark_watched?url={request.url}",
-            playlist_url=f"{request.url}&tr={i}"
+            parser=f"{request.host_url}mark_watched?url={clean_url}",
+            playlist_url=f"{clean_url}&tr={i}"
         ))
     
     return jsonify(response_template)
@@ -515,7 +521,7 @@ def handle_turbo_id(response_template, kp_id):
         response_template["channels"].append(create_channel_item(
             title=provider.capitalize(), 
             icon=f"{ICON_BASE_URL}film.png",
-            playlist_url=f"{request.url}&source={provider}"
+            playlist_url=f"{clean_url_from_unwanted_params(request.url)}&source={provider}"
         ))
     
     return jsonify(response_template)
@@ -550,11 +556,12 @@ def handle_turbo_season(response_template, kp_id, season):
     episodes = app_state["balancers_api"].getEpisodes(int(season))
     watched_db = load_json("db.json")
     
+    clean_url = clean_url_from_unwanted_params(request.url)
     for episode in episodes:
         ep_num = episode.split(" ")[0] if episode.split(" ")[0].isdigit() else episode.split(" ")[1]
         is_watched = any(
             item for item in watched_db["watched"]
-            if (item["url"] == request.url.split("&")[0] and
+            if (item["url"] == clean_url.split("&")[0] and
                 item.get("season") == request.args["s"] and
                 item.get("episode") == ep_num)
         )
@@ -562,9 +569,9 @@ def handle_turbo_season(response_template, kp_id, season):
         response_template["channels"].append(create_channel_item(
             title=f"<s>{episode}</s>" if is_watched else episode,
             icon=f"{ICON_BASE_URL}film.png",
-            parser=f"{request.host_url}mark_watched?url={request.url.split('&')[0]}"
+            parser=f"{request.host_url}mark_watched?url={clean_url.split('&')[0]}"
                   f"&season={request.args.get('s')}&episode={ep_num}",
-            playlist_url=f"{request.url}&e={ep_num}"
+            playlist_url=f"{clean_url}&e={ep_num}"
         ))
     
     return jsonify(response_template)
@@ -576,11 +583,12 @@ def handle_turbo_episode(response_template, kp_id, season, episode):
             request.args.get("source"))
     
     translations = app_state["balancers_api"].getTranslations(int(season), int(episode))
+    clean_url = clean_url_from_unwanted_params(request.url)
     for translation in translations:
         response_template["channels"].append(create_channel_item(
             title=translation,
             icon=f"{ICON_BASE_URL}film.png",
-            playlist_url=f"{request.url}&trs={translations.index(translation)}"
+            playlist_url=f"{clean_url}&trs={translations.index(translation)}"
         ))
     
     return jsonify(response_template)
