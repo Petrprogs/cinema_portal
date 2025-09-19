@@ -244,7 +244,8 @@ def serve_segment(count):
 def process_item():
     response_template = load_json("search_result_page.json")
     url = request.args.get("url")
-    
+    global BASE_URL
+    BASE_URL = request.host_url
     if request.args.get("e"):
         return handle_episode(response_template, url)
     if request.args.get("s"):
@@ -301,7 +302,7 @@ def handle_season(response_template, url):
         response_template["channels"].append(create_channel_item(
             title=f"Эпизод {episode_number}",
             icon=f"{ICON_BASE_URL}film.png",
-            playlist_url=f"{BASE_URL}/process_item?url={url}&translation={request.args.get('translation')}"
+            playlist_url=f"{BASE_URL}process_item?url={url}&translation={request.args.get('translation')}"
                         f"&s={request.args.get('s')}&e={episode_number}"
         ))
     
@@ -344,7 +345,7 @@ def handle_translation(response_template, url):
         response_template["channels"].append(create_channel_item(
             title=f"Сезон {season}",
             icon=f"{ICON_BASE_URL}series.png",
-            playlist_url=f"{BASE_URL}/process_item?url={url}&translation={request.args.get('translation')}&s={season}"
+            playlist_url=f"{BASE_URL}process_item?url={url}&translation={request.args.get('translation')}&s={season}"
         ))
     
     return jsonify(response_template)
@@ -358,7 +359,7 @@ def handle_url(response_template, url):
         response_template["channels"].append(create_channel_item(
             title=tr_name if tr_name else "По умолчанию",
             icon=f"{ICON_BASE_URL}series.png",
-            playlist_url=f"{BASE_URL}/process_item?url={url}&translation={tr_id}"
+            playlist_url=f"{BASE_URL}process_item?url={url}&translation={tr_id}"
         ))
     
     return jsonify(response_template)
@@ -474,7 +475,7 @@ def handle_turbo_cdn(response_template, cdn_name):
         kp_id
     ).get_provider(cdn_name, query_params)
     if cdn_name == "hdRezka":
-        return redirect(f"{BASE_URL}/process_item?url={app_state['balancers_api'].url}", 302)
+        return redirect(f"{request.host_url}process_item?url={app_state['balancers_api'].url}", 302)
     
     if hasattr(app_state["balancers_api"], 'getSeasons'):
         seasons = app_state["balancers_api"].getSeasons()
