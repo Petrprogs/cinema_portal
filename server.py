@@ -22,7 +22,6 @@ config = {
 OUTPUT_DIR = 'hls_output'
 ICON_BASE_URL = "http://94.177.51.191/res/?res="
 BASE_URL = "http://94.177.51.191"
-TURBO_BASE_URL = "http://192.168.1.90"
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -155,6 +154,9 @@ def start_ffmpeg(mp4_url, origin="", referer="", proxy=""):
 @app.route("/")
 @auth_required
 def main_page():
+    global BASE_URL, ICON_BASE_URL
+    BASE_URL = request.host_url
+    ICON_BASE_URL = request.host_url+"res/?res="
     index_page = load_json("main_page.json")
     for channel in index_page["channels"]:
         channel["playlist_url"] = channel["playlist_url"].replace("http://94.177.51.191/", request.host_url)
@@ -244,8 +246,6 @@ def serve_segment(count):
 def process_item():
     response_template = load_json("search_result_page.json")
     url = request.args.get("url")
-    global BASE_URL
-    BASE_URL = request.host_url
     if request.args.get("e"):
         return handle_episode(response_template, url)
     if request.args.get("s"):
