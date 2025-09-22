@@ -155,13 +155,10 @@ def start_ffmpeg(mp4_url, origin="", referer="", proxy=""):
 @app.route("/")
 @auth_required
 def main_page():
-    global BASE_URL, ICON_BASE_URL
-    BASE_URL = request.host_url
-    ICON_BASE_URL = request.host_url+"res/?res="
     index_page = load_json("main_page.json")
     for channel in index_page["channels"]:
-        channel["playlist_url"] = channel["playlist_url"].replace("http://94.177.51.191/", BASE_URL)
-        channel["logo_30x30"] = channel["logo_30x30"].replace("http://94.177.51.191/", BASE_URL)
+        channel["playlist_url"] = channel["playlist_url"].replace("http://94.177.51.191/", request.host_url)
+        channel["logo_30x30"] = channel["logo_30x30"].replace("http://94.177.51.191/", request.host_url)
     return jsonify(index_page)
 
 @app.route("/bookmarks/", strict_slashes=False)
@@ -180,7 +177,7 @@ def watched():
             playlist_url=item["url"],
             menu=[{
                 "title": "Из избранного", 
-                "playlist_url": f"{BASE_URL}/rem_from_fav?url={base64_url}"
+                "playlist_url": f"{request.host_url}rem_from_fav?url={base64_url}"
             }]
         ))
     return jsonify(response_template)
@@ -274,16 +271,16 @@ def handle_episode(response_template, url):
         response_template["channels"].append(create_channel_item(
             title=f"{app_state['rezka'].name} {res}",
             icon=url_for("resources", res="film.png", _external=True),
-            parser=f"{BASE_URL}/mark_watched?url={url}&e={request.args.get('e')}&s={request.args.get('s')}",
+            parser=f"{request.host_url}mark_watched?url={url}&e={request.args.get('e')}&s={request.args.get('s')}",
             stream_url=clean_url
         ))
         
         if res == "1080p":
             response_template["channels"].append(create_channel_item(
                 title=f"{app_state['rezka'].name} {res} DRC",
-                parser=f"{BASE_URL}/mark_watched?url={url}",
+                parser=f"{request.host_url}mark_watched?url={url}",
                 icon=url_for("resources", res="film.png", _external=True),
-                stream_url=f"{BASE_URL}/stream.m3u8?stream={clean_url}"
+                stream_url=f"{request.host_url}stream.m3u8?stream={clean_url}"
             ))
     
     return jsonify(response_template)
@@ -304,7 +301,7 @@ def handle_season(response_template, url):
         response_template["channels"].append(create_channel_item(
             title=f"Эпизод {episode_number}",
             icon=url_for("resources", res="film.png", _external=True),
-            playlist_url=f"{BASE_URL}process_item?url={url}&translation={request.args.get('translation')}"
+            playlist_url=f"{request.host_url}process_item?url={url}&translation={request.args.get('translation')}"
                         f"&s={request.args.get('s')}&e={episode_number}"
         ))
     
@@ -333,7 +330,7 @@ def handle_translation(response_template, url):
                 response_template["channels"].append(create_channel_item(
                     title=f"{app_state['rezka'].name} {res} DRC",
                     icon=url_for("resources", res="film.png", _external=True),
-                    stream_url=f"{BASE_URL}/stream.m3u8?stream={clean_url}"
+                    stream_url=f"{request.host_url}stream.m3u8?stream={clean_url}"
                 ))
         
         return jsonify(response_template)
@@ -347,7 +344,7 @@ def handle_translation(response_template, url):
         response_template["channels"].append(create_channel_item(
             title=f"Сезон {season}",
             icon=url_for("resources", res="series.png", _external=True),
-            playlist_url=f"{BASE_URL}process_item?url={url}&translation={request.args.get('translation')}&s={season}"
+            playlist_url=f"{request.host_url}process_item?url={url}&translation={request.args.get('translation')}&s={season}"
         ))
     
     return jsonify(response_template)
@@ -361,7 +358,7 @@ def handle_url(response_template, url):
         response_template["channels"].append(create_channel_item(
             title=tr_name if tr_name else "По умолчанию",
             icon=url_for("resources", res="series.png", _external=True),
-            playlist_url=f"{BASE_URL}process_item?url={url}&translation={tr_id}"
+            playlist_url=f"{request.host_url}process_item?url={url}&translation={tr_id}"
         ))
     
     return jsonify(response_template)
@@ -547,7 +544,7 @@ def handle_turbo_translation(response_template, kp_id, tr_index):
             response_template["channels"].append(create_channel_item(
                 title=f"{search_title} {quality} DRC",
                 icon=url_for("resources", res="film.png", _external=True),
-                stream_url=f"{BASE_URL}/stream.m3u8?stream={stream_url}"
+                stream_url=f"{request.host_url}stream.m3u8?stream={stream_url}"
             ))
     return jsonify(response_template)
 
@@ -614,7 +611,7 @@ def handle_turbo_series_translation(response_template, kp_id, season, episode, t
             response_template["channels"].append(create_channel_item(
                 title=f"{quality} DRC",
                 icon=url_for("resources", res="film.png", _external=True),
-                stream_url=f"{BASE_URL}/stream.m3u8?stream={stream_url}"
+                stream_url=f"{request.host_url}stream.m3u8?stream={stream_url}"
             ))
     
     return jsonify(response_template)

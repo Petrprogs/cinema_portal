@@ -5,7 +5,7 @@
     "channels": [
         {
             "title": "\u041f\u043e\u0438\u0441\u043a",
-            "logo_30x30": "http://94.177.51.191/res/?res=search.png",
+            "logo_30x30": "http://94.177.51.191/res/search.png",
             "description": "Поиск по Кинопоиск. Источники потоков: TurboCDN, Vibix, HdRezka",
             "value": "",
             "search_on": "search_on",
@@ -13,7 +13,7 @@
         },
         {
             "title": "Избранное",
-            "logo_30x30": "http://94.177.51.191/res/?res=bookmark.png",
+            "logo_30x30": "http://94.177.51.191/res/bookmark.png",
             "description": "Ваше избранное",
             "playlist_url": "http://94.177.51.191/bookmarks/"
         }
