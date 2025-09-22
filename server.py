@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, jsonify, redirect, Response, send_from_directory
+from flask import Flask, request, send_file, jsonify, redirect, Response, send_from_directory, url_for
 from flask_cors import CORS
 from flask_caching import Cache
 import json
@@ -51,7 +51,8 @@ def save_json(filename, data):
 
 def get_icon(item_type):
     """Return the appropriate icon based on the item type."""
-    return f"{ICON_BASE_URL}film.png" if item_type == "films" else f"{ICON_BASE_URL}series.png"
+    
+    return url_for("resources", res="film.png", _external=True) if item_type == "films" else url_for("resources", res="film.png", _external=True)
 
 def auth_required(f):
     """Decorator to check authentication."""
@@ -159,7 +160,8 @@ def main_page():
     ICON_BASE_URL = request.host_url+"res/?res="
     index_page = load_json("main_page.json")
     for channel in index_page["channels"]:
-        channel["playlist_url"] = channel["playlist_url"].replace("http://94.177.51.191/", request.host_url)
+        channel["playlist_url"] = channel["playlist_url"].replace("http://94.177.51.191/", BASE_URL)
+        channel["logo_30x30"] = channel["logo_30x30"].replace("http://94.177.51.191/", BASE_URL)
     return jsonify(index_page)
 
 @app.route("/bookmarks/", strict_slashes=False)
@@ -173,7 +175,7 @@ def watched():
         base64_url = base64.b64encode(item['url'].encode()).decode()
         response_template["channels"].append(create_channel_item(
             title=item["title"],
-            icon=f"{ICON_BASE_URL}film.png",
+            icon=url_for("resources", res="film.png", _external=True),
             description=item["description"],
             playlist_url=item["url"],
             menu=[{
@@ -271,7 +273,7 @@ def handle_episode(response_template, url):
         
         response_template["channels"].append(create_channel_item(
             title=f"{app_state['rezka'].name} {res}",
-            icon=f"{ICON_BASE_URL}film.png",
+            icon=url_for("resources", res="film.png", _external=True),
             parser=f"{BASE_URL}/mark_watched?url={url}&e={request.args.get('e')}&s={request.args.get('s')}",
             stream_url=clean_url
         ))
@@ -280,7 +282,7 @@ def handle_episode(response_template, url):
             response_template["channels"].append(create_channel_item(
                 title=f"{app_state['rezka'].name} {res} DRC",
                 parser=f"{BASE_URL}/mark_watched?url={url}",
-                icon=f"{ICON_BASE_URL}film.png",
+                icon=url_for("resources", res="film.png", _external=True),
                 stream_url=f"{BASE_URL}/stream.m3u8?stream={clean_url}"
             ))
     
@@ -301,7 +303,7 @@ def handle_season(response_template, url):
     for episode_number in range(1, len(episodes) + 1):
         response_template["channels"].append(create_channel_item(
             title=f"Эпизод {episode_number}",
-            icon=f"{ICON_BASE_URL}film.png",
+            icon=url_for("resources", res="film.png", _external=True),
             playlist_url=f"{BASE_URL}process_item?url={url}&translation={request.args.get('translation')}"
                         f"&s={request.args.get('s')}&e={episode_number}"
         ))
@@ -322,7 +324,7 @@ def handle_translation(response_template, url):
             
             response_template["channels"].append(create_channel_item(
                 title=f"{app_state['rezka'].name} {res}",
-                icon=f"{ICON_BASE_URL}film.png",
+                icon=url_for("resources", res="film.png", _external=True),
                 stream_url=clean_url,
                 subtitles=subs
             ))
@@ -330,7 +332,7 @@ def handle_translation(response_template, url):
             if res == "1080p":
                 response_template["channels"].append(create_channel_item(
                     title=f"{app_state['rezka'].name} {res} DRC",
-                    icon=f"{ICON_BASE_URL}film.png",
+                    icon=url_for("resources", res="film.png", _external=True),
                     stream_url=f"{BASE_URL}/stream.m3u8?stream={clean_url}"
                 ))
         
@@ -344,7 +346,7 @@ def handle_translation(response_template, url):
     for season in app_state["transl"]["seasons"].keys():
         response_template["channels"].append(create_channel_item(
             title=f"Сезон {season}",
-            icon=f"{ICON_BASE_URL}series.png",
+            icon=url_for("resources", res="series.png", _external=True),
             playlist_url=f"{BASE_URL}process_item?url={url}&translation={request.args.get('translation')}&s={season}"
         ))
     
@@ -358,7 +360,7 @@ def handle_url(response_template, url):
     for tr_name, tr_id in translations.items():
         response_template["channels"].append(create_channel_item(
             title=tr_name if tr_name else "По умолчанию",
-            icon=f"{ICON_BASE_URL}series.png",
+            icon=url_for("resources", res="series.png", _external=True),
             playlist_url=f"{BASE_URL}process_item?url={url}&translation={tr_id}"
         ))
     
@@ -388,9 +390,9 @@ def mark_watched():
     save_json("db.json", db_dict)
     return jsonify({"message": "Success"})
 
-@app.route("/res/", strict_slashes=False)
-def resources():
-    return send_file("res/" + request.args.get("res"), as_attachment=True)
+@app.route("/res/<res>", strict_slashes=False)
+def resources(res):
+    return send_file("res/" + res, as_attachment=True)
 
 # Turbo CDN parser routes
 @app.route("/turbo/search", strict_slashes=False)
@@ -406,10 +408,11 @@ def turbo_search():
     for item in search_result:
         # Store mapping for later use
         app_state['kp_id_to_title'][str(item['id'])] = item['title']
+        
         search_data["channels"].append(create_channel_item(
             title=item["title"],
-            icon=f"{ICON_BASE_URL}film.png",
-            description=f'<img style="float: left; padding-right: 15px" src="{item["poster"]}">',
+            icon=url_for("resources", res="film.png", _external=True),
+            description=f'<img style="float: left; padding-right: 15px" src="{item["poster"]}">{item["raw_data"]["year"]}<br>{", ".join(country["country"] for country in item["raw_data"]["countries"])}<br>Жанры: {", ".join(genre["genre"] for genre in item["raw_data"]["genres"])}<br>Оценка Кинопоиск: {item["raw_data"]["rating"]}<br>{item["raw_data"]["description"][:item["raw_data"]["description"].find(".", item["raw_data"]["description"].find(".") + 1)] if item["raw_data"]["description"].find(".", item["raw_data"]["description"].find(".") + 1) != -1 else item["raw_data"]["description"]}',
             playlist_url=f"{request.host_url}turbo/process_item?id={item['id']}",  # No title in URL
             menu=[{
                 "title": "В избранное", 
@@ -483,7 +486,7 @@ def handle_turbo_cdn(response_template, cdn_name):
             for season in seasons:
                 response_template["channels"].append(create_channel_item(
                     title=season,
-                    icon=f"{ICON_BASE_URL}film.png",
+                    icon=url_for("resources", res="film.png", _external=True),
                     playlist_url=f"{clean_url_from_unwanted_params(request.url)}&s={season.split(' ')[0] if season.split(' ')[0].isdigit() else season.split(' ')[1]}"
                 ))
             return jsonify(response_template)
@@ -501,7 +504,7 @@ def handle_turbo_cdn(response_template, cdn_name):
         
         response_template["channels"].append(create_channel_item(
             title=f"<s>{translation}</s>" if is_watched else translation,
-            icon=f"{ICON_BASE_URL}film.png",
+            icon=url_for("resources", res="film.png", _external=True),
             parser=f"{request.host_url}mark_watched?url={clean_url}",
             playlist_url=f"{clean_url}&tr={i}"
         ))
@@ -521,7 +524,7 @@ def handle_turbo_id(response_template, kp_id):
     for provider in providers:
         response_template["channels"].append(create_channel_item(
             title=provider.capitalize(), 
-            icon=f"{ICON_BASE_URL}film.png",
+            icon=url_for("resources", res="film.png", _external=True),
             playlist_url=f"{clean_url_from_unwanted_params(request.url)}&source={provider}"
         ))
     
@@ -537,13 +540,13 @@ def handle_turbo_translation(response_template, kp_id, tr_index):
     for quality, stream_url in streams:
         response_template["channels"].append(create_channel_item(
             title=f"{search_title} {quality}",
-            icon=f"{ICON_BASE_URL}film.png",
+            icon=url_for("resources", res="film.png", _external=True),
             stream_url=f"{request.host_url}turbo/redir?url={stream_url}"
         ))
         if quality in ("1080p", "720p", "1080", "720"):
             response_template["channels"].append(create_channel_item(
                 title=f"{search_title} {quality} DRC",
-                icon=f"{ICON_BASE_URL}film.png",
+                icon=url_for("resources", res="film.png", _external=True),
                 stream_url=f"{BASE_URL}/stream.m3u8?stream={stream_url}"
             ))
     return jsonify(response_template)
@@ -569,7 +572,7 @@ def handle_turbo_season(response_template, kp_id, season):
         
         response_template["channels"].append(create_channel_item(
             title=f"<s>{episode}</s>" if is_watched else episode,
-            icon=f"{ICON_BASE_URL}film.png",
+            icon=url_for("resources", res="film.png", _external=True),
             parser=f"{request.host_url}mark_watched?url={clean_url.split('&')[0]}"
                   f"&season={request.args.get('s')}&episode={ep_num}",
             playlist_url=f"{clean_url}&e={ep_num}"
@@ -588,7 +591,7 @@ def handle_turbo_episode(response_template, kp_id, season, episode):
     for translation in translations:
         response_template["channels"].append(create_channel_item(
             title=translation,
-            icon=f"{ICON_BASE_URL}film.png",
+            icon=url_for("resources", res="film.png", _external=True),
             playlist_url=f"{clean_url}&trs={translations.index(translation)}"
         ))
     
@@ -603,14 +606,14 @@ def handle_turbo_series_translation(response_template, kp_id, season, episode, t
     for quality, stream_url in streams:
         response_template["channels"].append(create_channel_item(
             title=f"{quality}",
-            icon=f"{ICON_BASE_URL}film.png",
+            icon=url_for("resources", res="film.png", _external=True),
             stream_url=f"{request.host_url}turbo/redir?url={stream_url.replace('https','http')}"
         ))
         
         if quality in ("1080p", "720p", "1080", "720"):
             response_template["channels"].append(create_channel_item(
                 title=f"{quality} DRC",
-                icon=f"{ICON_BASE_URL}film.png",
+                icon=url_for("resources", res="film.png", _external=True),
                 stream_url=f"{BASE_URL}/stream.m3u8?stream={stream_url}"
             ))
     
