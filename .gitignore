@@ -123,3 +123,4 @@ index.js
 # Waitress
 waitress_server.py
 vscode
+config.py

@@ -1,11 +1,9 @@
 {
     "fxml": "This page contains FXML code! Open it in the Fork browser or any other browser that supports FXML code.",
-    "title": "HDrezka",
+    "title": "Cinema portal",
     "icon": "http:\/\/fxmlparsers.in.net\/\/icons\/rezka.png",
     "channels": [
     ],
-    "cachetime": "7200",
-    "cacheinfo": "FROMCACHE",
     "align": "center",
     "color": "#cccccc",
     "background": "#313131",

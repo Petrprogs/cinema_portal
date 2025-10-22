@@ -1,31 +1,26 @@
-from flask import Flask, request, send_file, jsonify, redirect, Response, send_from_directory, url_for
-from flask_cors import CORS
-from flask_caching import Cache
-import json
-import os
-import subprocess
-from videobalancers import HdRezkaApi
-import shutil
-import VideoBalancersApi
 import base64
-from functools import wraps
+import os
+import shutil
+import subprocess
+
+from flask import (Flask, jsonify, redirect, request, send_file,
+                   send_from_directory, url_for)
+from flask_caching import Cache
+from flask_cors import CORS
+
+import VideoBalancersApi
+from videobalancers import HdRezkaApi
 from VideoBalancersApi import fetch_and_update_api_base_url
-
-# Configuration
-config = {
-    "DEBUG": True,
-    "CACHE_TYPE": "SimpleCache",
-    "CACHE_DEFAULT_TIMEOUT": 300
-}
-
-# Constants
-OUTPUT_DIR = 'hls_output'
-ICON_BASE_URL = "http://94.177.51.191/res/?res="
-BASE_URL = "http://94.177.51.191"
+from utils import *
+try:
+    import config
+except ImportError:
+    print("config.py not found! Exiting...")
+    exit()
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config.from_mapping(config)
+app.config.from_mapping(config.cache_config)
 CORS(app)
 cache = Cache(app)
 cache.init_app(app)
@@ -39,56 +34,10 @@ app_state = {
 }
 
 # Helper functions
-def load_json(filename):
-    """Load JSON data from a file."""
-    with open(filename, 'r') as f:
-        return json.load(f)
-
-def save_json(filename, data):
-    """Save JSON data to a file."""
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=2)
-
 def get_icon(item_type):
     """Return the appropriate icon based on the item type."""
     
     return url_for("resources", res="film.png", _external=True) if item_type == "films" else url_for("resources", res="film.png", _external=True)
-
-def auth_required(f):
-    """Decorator to check authentication."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not request.args.get("box_mac"):
-            return "Unauthorized", 401
-        return f(*args, **kwargs)
-    return decorated_function
-
-def clean_url_from_unwanted_params(url):
-    """Remove unwanted query parameters from URL."""
-    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-    
-    # Parameters to remove
-    unwanted_params = ['box_client', 'box_mac', 'initial', 'platform', 'country', 'tvp', 'hw']
-    
-    parsed = urlparse(url)
-    query_params = parse_qs(parsed.query)
-    
-    # Remove unwanted parameters
-    for param in unwanted_params:
-        query_params.pop(param, None)
-    
-    # Rebuild query string
-    new_query = urlencode(query_params, doseq=True)
-    
-    # Reconstruct URL
-    return urlunparse((
-        parsed.scheme,
-        parsed.netloc,
-        parsed.path,
-        parsed.params,
-        new_query,
-        parsed.fragment
-    ))
 
 def create_channel_item(title, icon, description=None, playlist_url=None, menu=None, parser=None, stream_url=None, subtitles=None):
     """Create a standardized channel item dictionary."""
@@ -109,27 +58,27 @@ def create_channel_item(title, icon, description=None, playlist_url=None, menu=N
         item["subtitles"] = subtitles
     return item
 
-def initialize_ffmpeg(stream_url, origin="", referer="", proxy=""):
+def initialize_ffmpeg(stream_url, host, origin="", referer="", proxy=""):
     """Initialize the FFmpeg process before the first request."""
     if app_state['data'].get("drc_stream") != stream_url:
         if app_state['ffmpeg_process']:
             app_state['ffmpeg_process'].kill()
         
         app_state['data']["drc_stream"] = stream_url
-        start_ffmpeg(stream_url, origin, referer, proxy)
+        start_ffmpeg(stream_url, host, origin, referer, proxy)
         app_state['ffmpeg_process'] = None
 
-def start_ffmpeg(mp4_url, origin="", referer="", proxy=""):
+def start_ffmpeg(mp4_url, host, origin="", referer="", proxy=""):
     """Start the FFmpeg process to convert the MP4 stream into HLS segments."""
-    shutil.rmtree(OUTPUT_DIR, ignore_errors=True)
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    shutil.rmtree(config.FFMPEG_OUTPUT_DIR, ignore_errors=True)
+    os.makedirs(config.FFMPEG_OUTPUT_DIR, exist_ok=True)
     
     ffmpeg_command = [
         'ffmpeg',
         '-copyts',
         '-user_agent', 'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0',
         '-i', mp4_url,
-        '-hls_base_url', BASE_URL + '/',
+        '-hls_base_url', host,
         '-filter_complex', 'compand=attacks=0:points=-80/-900|-45/-15|-27/-9|0/-7|20/-7:gain=5',
         '-c:v', 'copy',
         '-c:a', 'aac',
@@ -138,8 +87,8 @@ def start_ffmpeg(mp4_url, origin="", referer="", proxy=""):
         '-hls_list_size', '0',
         '-hls_playlist_type', 'event',
         '-hls_flags', 'append_list',
-        '-hls_segment_filename', os.path.join(OUTPUT_DIR, 'segment%03d.ts'),
-        os.path.join(OUTPUT_DIR, 'stream.m3u8'),
+        '-hls_segment_filename', os.path.join(config.FFMPEG_OUTPUT_DIR, 'segment%03d.ts'),
+        os.path.join(config.FFMPEG_OUTPUT_DIR, 'stream.m3u8'),
     ]
     
     if origin:
@@ -155,7 +104,7 @@ def start_ffmpeg(mp4_url, origin="", referer="", proxy=""):
 @app.route("/")
 @auth_required
 def main_page():
-    index_page = load_json("main_page.json")
+    index_page = load_json("templates/main_page.json")
     for channel in index_page["channels"]:
         channel["playlist_url"] = channel["playlist_url"].replace("http://94.177.51.191/", request.host_url)
         channel["logo_30x30"] = channel["logo_30x30"].replace("http://94.177.51.191/", request.host_url)
@@ -165,7 +114,7 @@ def main_page():
 @auth_required
 def watched():
     db_dict = load_json("db.json")
-    response_template = load_json("search_result_page.json")
+    response_template = load_json("templates/search_result_page.json")
     db_dict["bookmarks"].reverse()
 
     for item in db_dict["bookmarks"]:
@@ -184,7 +133,7 @@ def watched():
 
 @app.route("/add_to_fav/", strict_slashes=False)
 def add_to_fav():
-    feed_response = load_json("search_result_page.json")
+    feed_response = load_json("templates/search_result_page.json")
     db_dict = load_json("db.json")
     
     url = request.args.get("url")
@@ -207,7 +156,7 @@ def add_to_fav():
 
 @app.route("/rem_from_fav/", strict_slashes=False)
 def rem_from_fav():
-    feed_response = load_json("search_result_page.json")
+    feed_response = load_json("templates/search_result_page.json")
     db_dict = load_json("db.json")
     
     url = base64.b64decode(request.args.get("url")).decode()
@@ -225,25 +174,26 @@ def serve_playlist():
     """Serve the HLS playlist (m3u8 file)."""
     initialize_ffmpeg(
         request.args.get("stream"),
+        request.host_url,
         request.args.get("origin"),
         request.args.get("referer"),
         request.args.get("proxy")
     )
     
-    while not os.path.exists(f"{OUTPUT_DIR}/stream.m3u8"):
+    while not os.path.exists(f"{config.FFMPEG_OUTPUT_DIR}/stream.m3u8"):
         pass
     
-    return send_from_directory(OUTPUT_DIR, 'stream.m3u8', mimetype='application/vnd.apple.mpegurl')
+    return send_from_directory(config.FFMPEG_OUTPUT_DIR, 'stream.m3u8', mimetype='application/vnd.apple.mpegurl')
 
 @app.route('/segment<count>.ts')
 def serve_segment(count):
     """Serve the HLS segment files (.ts)."""
-    return send_from_directory(OUTPUT_DIR, f'segment{count}.ts', mimetype='video/MP2T')
+    return send_from_directory(config.FFMPEG_OUTPUT_DIR, f'segment{count}.ts', mimetype='video/MP2T')
 
 @app.route("/process_item/", strict_slashes=False)
 @cache.cached(query_string=True)
 def process_item():
-    response_template = load_json("search_result_page.json")
+    response_template = load_json("templates/search_result_page.json")
     url = request.args.get("url")
     if request.args.get("e"):
         return handle_episode(response_template, url)
@@ -257,7 +207,7 @@ def process_item():
 def handle_episode(response_template, url):
     """Handle the episode request."""
     if not app_state.get("rezka"):
-        app_state["rezka"] = HdRezkaApi.HdRezkaApi(url, email="timoshinp72@gmail.com", password="3198084972")
+        app_state["rezka"] = HdRezkaApi.HdRezkaApi(url, email=config.REZKA_EMAIL, password=config.REZKA_PASSWORD)
     
     streams = app_state["rezka"].getStream(
         request.args.get("s"),
@@ -288,7 +238,7 @@ def handle_episode(response_template, url):
 def handle_season(response_template, url):
     """Handle the season request."""
     if not app_state.get("rezka"):
-        app_state["rezka"] = HdRezkaApi.HdRezkaApi(url, email="timoshinp72@gmail.com", password="3198084972")
+        app_state["rezka"] = HdRezkaApi.HdRezkaApi(url, email=config.REZKA_EMAIL, password=config.REZKA_PASSWORD)
         if not app_state.get("transl"):
             seasons = app_state["rezka"].getSeasons()
             app_state["transl"] = next(
@@ -310,7 +260,7 @@ def handle_season(response_template, url):
 def handle_translation(response_template, url):
     """Handle the translation request."""
     if not app_state.get("rezka"):
-        app_state["rezka"] = HdRezkaApi.HdRezkaApi(url, email="timoshinp72@gmail.com", password="3198084972")
+        app_state["rezka"] = HdRezkaApi.HdRezkaApi(url, email=config.REZKA_EMAIL, password=config.REZKA_PASSWORD)
     
     if app_state["rezka"].type == "video.movie":
         streams = app_state["rezka"].getStream('1', '1', translation=request.args.get("translation"))
@@ -351,7 +301,7 @@ def handle_translation(response_template, url):
 
 def handle_url(response_template, url):
     """Handle the URL request, getting translations."""
-    app_state["rezka"] = HdRezkaApi.HdRezkaApi(url, email="timoshinp72@gmail.com", password="3198084972")
+    app_state["rezka"] = HdRezkaApi.HdRezkaApi(url, email=config.REZKA_EMAIL, password=config.REZKA_PASSWORD)
     translations = app_state["rezka"].getTranslations()
     
     for tr_name, tr_id in translations.items():
@@ -394,7 +344,7 @@ def resources(res):
 # Turbo CDN parser routes
 @app.route("/turbo/search", strict_slashes=False)
 def turbo_search():
-    search_data = load_json("search_result_page.json")
+    search_data = load_json("templates/search_result_page.json")
     balancers_api = VideoBalancersApi.VideoBalancersApi()
     search_result = balancers_api.search(request.args.get("search"))    
 
@@ -421,7 +371,7 @@ def turbo_search():
 
 @app.route("/turbo/process_item", strict_slashes=False)
 def turbo_process_item():
-    response_template = load_json("search_result_page.json")
+    response_template = load_json("templates/search_result_page.json")
     
     if request.args.get("trs"):
         return handle_turbo_series_translation(

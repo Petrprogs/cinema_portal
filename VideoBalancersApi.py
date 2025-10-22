@@ -1,10 +1,15 @@
-import traceback
-import requests
-from bs4 import BeautifulSoup
 import json
 import os
-from urllib.parse import unquote
-from videobalancers import TurboApi, VibixApi, HdRezkaApi
+import traceback
+
+import requests
+
+try:
+    import config
+except ImportError:
+    print("config.py not found! Exiting...")
+    exit()
+from videobalancers import HdRezkaApi, TurboApi, VibixApi
 
 API_BASE_URL_FILE = 'balancer_domain.json'
 DEFAULT_API_BASE_URL = 'https://api4.rhhhhhhh.live'
@@ -92,10 +97,8 @@ class VideoBalancersApi():
                 print("Found hdrezka")
                 self.url = iframe_info.get('iframe')
                 result.append("hdRezka")
-            # Add more elifs for other providers as needed
 
-        # Optionally, keep the HdRezkaApi logic if you still want to check search_data
-        rezka = HdRezkaApi.HdRezkaApi("", search_data, "timoshinp72@gmail.com", "3198084972")
+        rezka = HdRezkaApi.HdRezkaApi("", search_data, config.REZKA_EMAIL, config.REZKA_EMAIL)
         if rezka.found_item:
             print("Found hdrezka")
             self.url = rezka.url

@@ -1,0 +1,12 @@
+# Flask caching
+cache_config = {
+    "CACHE_TYPE": "SimpleCache",
+    "CACHE_DEFAULT_TIMEOUT": 300
+}
+
+# HDrezka account
+REZKA_EMAIL = "examplegmail.com"
+REZKA_PASSWORD = "123456"
+
+# FFMPEG settings 
+FFMPEG_OUTPUT_DIR = 'hls_output'
