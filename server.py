@@ -1,7 +1,10 @@
+import atexit
 import base64
 import os
 import shutil
+import signal
 import subprocess
+import sys
 
 from flask import (Flask, jsonify, redirect, request, send_file,
                    send_from_directory, url_for)
@@ -32,6 +35,48 @@ app_state = {
     'rezka': None,
     'balancers_api': None
 }
+
+def save_app_state():
+    """Save app_state to disk"""
+    try:
+        # Don't save ffmpeg_process as it can't be serialized
+        state_to_save = {
+            'data': app_state.get('data', {}),
+            'rezka_url': app_state.get('rezka').url if app_state.get('rezka') else None,
+            'balancers_api_data': getattr(app_state.get('balancers_api'), '__dict__', {}) if app_state.get('balancers_api') else {},
+            'kp_id_to_title': app_state.get('kp_id_to_title', {})
+        }
+        
+        with open('app_state.json', 'w', encoding='utf-8') as f:
+            json.dump(state_to_save, f, indent=2, ensure_ascii=False)
+        print("App state saved successfully")
+    except Exception as e:
+        print(f"Error saving app state: {e}")
+
+def load_app_state():
+    """Load app_state from disk"""
+    try:
+        if os.path.exists('app_state.json'):
+            with open('app_state.json', 'r', encoding='utf-8') as f:
+                saved_state = json.load(f)
+            
+            # Restore basic data
+            app_state['data'] = saved_state.get('data', {})
+            app_state['kp_id_to_title'] = saved_state.get('kp_id_to_title', {})
+            
+            # Recreate rezka instance if URL exists
+            if saved_state.get('rezka_url'):
+                app_state['rezka'] = HdRezkaApi.HdRezkaApi(
+                    saved_state['rezka_url'], 
+                    email=config.REZKA_EMAIL, 
+                    password=config.REZKA_PASSWORD
+                )
+            
+            print("App state loaded successfully")
+            return True
+    except Exception as e:
+        print(f"Error loading app state: {e}")
+    return False
 
 # Helper functions
 def get_icon(item_type):
@@ -580,5 +625,28 @@ def update_balancer_domain():
     else:
         return jsonify({'success': False, 'error': 'Failed to fetch or parse new domain'}), 500
 
+def initialize_app():
+    """Initialize application on startup"""
+    print("Initializing application...")
+    load_app_state()
+    
+    os.makedirs(config.FFMPEG_OUTPUT_DIR, exist_ok=True)
+    
+    print("Application initialized")
+
+def shutdown_handler(signum=None, frame=None):
+    """Handle server shutdown gracefully"""
+    print("Shutting down, saving app state...")
+    save_app_state()
+    if app_state['ffmpeg_process']:
+        app_state['ffmpeg_process'].kill()
+    sys.exit()
+
 if __name__ == "__main__":
+    initialize_app()
+
+    atexit.register(shutdown_handler)
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
+    
     app.run(host="0.0.0.0", port=5001)
