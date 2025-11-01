@@ -400,11 +400,30 @@ def turbo_search():
     for item in search_result:
         # Store mapping for later use
         app_state['kp_id_to_title'][str(item['id'])] = item['title']
-        
+        description_text = item["raw_data"]["description"]
+        if description_text:
+            # Find the position of the second period
+            first_period = description_text.find(".")
+            second_period = description_text.find(".", first_period + 1)
+            if second_period != -1:
+                description_slice = description_text[:second_period]
+            else:
+                description_slice = description_text
+        else:
+            description_slice = ""
+
+        description = (
+            f'<img style="float: left; padding-right: 15px" src="{item["poster"]}">'
+            f'{item["raw_data"]["year"]}<br>'
+            f'{", ".join(country["country"] for country in item["raw_data"]["countries"])}<br>'
+            f'Жанры: {", ".join(genre["genre"] for genre in item["raw_data"]["genres"])}<br>'
+            f'Оценка Кинопоиск: {item["raw_data"]["rating"]}<br>'
+            f'{description_slice}'
+        )
         search_data["channels"].append(create_channel_item(
             title=item["title"],
             icon=url_for("resources", res="film.png", _external=True),
-            description=f'<img style="float: left; padding-right: 15px" src="{item["poster"]}">{item["raw_data"]["year"]}<br>{", ".join(country["country"] for country in item["raw_data"]["countries"])}<br>Жанры: {", ".join(genre["genre"] for genre in item["raw_data"]["genres"])}<br>Оценка Кинопоиск: {item["raw_data"]["rating"]}<br>{item["raw_data"]["description"][:item["raw_data"]["description"].find(".", item["raw_data"]["description"].find(".") + 1)] if item["raw_data"]["description"].find(".", item["raw_data"]["description"].find(".") + 1) != -1 else item["raw_data"]["description"]}',
+            description=description,
             playlist_url=f"{request.host_url}turbo/process_item?id={item['id']}",  # No title in URL
             menu=[{
                 "title": "В избранное", 
