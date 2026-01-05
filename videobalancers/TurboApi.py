@@ -5,19 +5,65 @@ import re
 import base64
 from urllib.parse import unquote
 import urllib3 
-
+from camoufox import Camoufox
+from threading import Event
+import time
 urllib3.disable_warnings()
 
 class TurboApi():
-    def __init__(self, iframe_url=None):
+    def __init__(self, iframe_url=None, kp_id=None):
+        self.kp_id = kp_id
         self.get_json_options(iframe_url)
         self.name = None
 
     def get_json_options(self, iframe_url):
-        headers = self._get_default_headers()
-        response = requests.get(iframe_url, headers=headers)
-        if response.status_code == 200:
-            self._process_json_response(response.text)
+        with Camoufox(humanize=True, headless="virtual") as browser:
+            page = browser.new_page()
+            
+            self._response_event = Event()
+
+            def route_handler(route, request):
+                route.continue_()
+
+            def response_handler(response):
+                url = response.url
+                print(url)
+                if ".obrut.show/embed/IDN/" in url and response.status == 200 and response.request.method == "POST":
+                    print(f"✅ Found target response: {url}")
+                    try:
+                        text = response.text()
+                        self._process_json_response(text)
+                        self._response_event.set()
+                    except Exception as e:
+                        print(f"⚠️  Error processing: {e}")
+            
+            page.route("**/.obrut.show/embed/*/content/*", route_handler)
+            page.on("response", response_handler)
+            
+            page.goto("https://reyohoho.github.io/reyohoho/movie/"+str(self.kp_id), wait_until="load")
+            
+            button = page.wait_for_selector('button[class="player-btn"]')
+            if button:
+                if 'turbo' not in button.inner_text().lower():
+                    button.click()
+                    players = page.query_selector_all('button[class^="player-item"]')
+                    for player in players:
+                        if 'turbo' in player.text_content().lower():
+                            player.click()
+                            break
+            
+            timeout = 30  # seconds
+            start_time = time.time()
+            
+            while not self._response_event.is_set():
+                if time.time() - start_time > timeout:
+                    print("⚠️  Timeout waiting for JSON response")
+                    break
+                page.wait_for_timeout(100)
+            
+            # Clean up
+            if hasattr(self, '_response_event'):
+                delattr(self, '_response_event')
 
     def _get_default_headers(self):
         return {

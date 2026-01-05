@@ -12,7 +12,7 @@ except ImportError:
 from videobalancers import HdRezkaApi, TurboApi, VibixApi
 
 API_BASE_URL_FILE = 'balancer_domain.json'
-DEFAULT_API_BASE_URL = 'https://api4.rhhhhhhh.live'
+DEFAULT_API_BASE_URL = 'https://api4.rhserv.vu'
 
 def load_api_base_url():
     if os.path.exists(API_BASE_URL_FILE):
@@ -58,6 +58,7 @@ API_BASE_URL = load_api_base_url()
 
 class VideoBalancersApi():
     def __init__(self, kp_id=None):
+        self.kp_id = kp_id
         if kp_id:
             self.iframes = self.get_iframes(kp_id)
             self.url = None
@@ -98,7 +99,7 @@ class VideoBalancersApi():
                 self.url = iframe_info.get('iframe')
                 result.append("hdRezka")
 
-        rezka = HdRezkaApi.HdRezkaApi("", search_data, config.REZKA_EMAIL, config.REZKA_EMAIL)
+        rezka = HdRezkaApi.HdRezkaApi("", search_data, config.REZKA_EMAIL, config.REZKA_PASSWORD)
         if rezka.found_item:
             print("Found hdrezka")
             self.url = rezka.url
@@ -115,10 +116,10 @@ class VideoBalancersApi():
             print(iframe_info)
             if iframe_info.get('name', '').lower() == name:
                 if name == "turbo":
-                    return TurboApi.TurboApi(iframe_info.get("iframe"))
+                    return TurboApi.TurboApi(iframe_info.get("iframe"), self.kp_id)
                 elif name == "vibix":
                     return VibixApi.VibixApi(iframe_info.get("iframe"))
         if search_data:
             print("Return rezka")
-            return HdRezkaApi.HdRezkaApi('', search_data, "timoshinp72@gmail.com", "3198084972")
+            return HdRezkaApi.HdRezkaApi('', search_data, config.REZKA_EMAIL, config.REZKA_PASSWORD)
         return None

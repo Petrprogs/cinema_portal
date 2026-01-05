@@ -18,7 +18,7 @@ def auth_required(f):
     """Decorator to check authentication."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not request.args.get("box_mac"):
+        if not request.args.get("box_mac") and not "127.0.0.1" in request.remote_addr:
             return "Unauthorized", 401
         return f(*args, **kwargs)
     return decorated_function
