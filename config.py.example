@@ -10,3 +10,7 @@ REZKA_PASSWORD = "123456"
 
 # FFMPEG settings 
 FFMPEG_OUTPUT_DIR = 'hls_output'
+
+LOCAL_VIDEO_DIRS = [
+    "./"
+]

@@ -12,6 +12,12 @@
             "playlist_url": "http://94.177.51.191/turbo/search/"
         },
         {
+            "title": "Локальные видео",
+            "logo_30x30": "http://94.177.51.191/res/film.png",
+            "description": "Локальные видео",
+            "playlist_url": "http://94.177.51.191/local_videos/"
+        },
+        {
             "title": "Избранное",
             "logo_30x30": "http://94.177.51.191/res/bookmark.png",
             "description": "Ваше избранное",

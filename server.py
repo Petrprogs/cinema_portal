@@ -1,20 +1,30 @@
 import atexit
 import base64
+import mimetypes
 import os
+from pathlib import Path
 import shutil
 import signal
 import subprocess
 import sys
 
-from flask import (Flask, jsonify, redirect, request, send_file,
-                   send_from_directory, url_for)
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    redirect,
+    request,
+    send_file,
+    send_from_directory,
+    url_for,
+)
 from flask_caching import Cache
 from flask_cors import CORS
 
 import VideoBalancersApi
-from videobalancers import HdRezkaApi
 from VideoBalancersApi import fetch_and_update_api_base_url
 from utils import *
+from videobalancers import HdRezkaApi
 try:
     import config
 except ImportError:
@@ -163,15 +173,24 @@ def watched():
     db_dict["bookmarks"].reverse()
 
     for item in db_dict["bookmarks"]:
-        base64_url = base64.b64encode(item['url'].encode()).decode()
+        if item.get("is_local"):
+            # Для локальных видео используем прямой URL
+            item_url = item['url']
+        else:
+            base64_url = base64.b64encode(item['url'].encode()).decode()
+            item_url = item['url']
+        
         response_template["channels"].append(create_channel_item(
             title=item["title"],
             icon=url_for("resources", res="film.png", _external=True),
             description=item["description"],
-            playlist_url=item["url"],
+            playlist_url=item_url,
             menu=[{
                 "title": "Из избранного", 
-                "playlist_url": f"{request.host_url}rem_from_fav?url={base64_url}"
+                "playlist_url": f"{request.host_url}rem_from_fav?url={base64.b64encode(item_url.encode()).decode()}"
+            }] if not item.get("is_local") else [{
+                "title": "Из избранного",
+                "playlist_url": f"{request.host_url}rem_from_fav?url={base64.b64encode(item_url.encode()).decode()}"
             }]
         ))
     return jsonify(response_template)
@@ -644,6 +663,119 @@ def update_balancer_domain():
     else:
         return jsonify({'success': False, 'error': 'Failed to fetch or parse new domain'}), 500
 
+@app.route("/local_videos/", strict_slashes=False)
+@auth_required
+def local_videos():
+    """Display list of local video files"""
+    response_template = load_json("templates/search_result_page.json")
+    video_files = scan_local_videos(config.LOCAL_VIDEO_DIRS)
+    
+    if not video_files:
+        response_template["channels"].append(create_channel_item(
+            title="Локальных видео не найдено",
+            icon=url_for("resources", res="film.png", _external=True),
+            description=f"Проверенные директории: {', '.join(config.LOCAL_VIDEO_DIRS)}"
+        ))
+        return jsonify(response_template)
+    
+    for video in video_files:
+        # Кодируем путь для безопасной передачи в URL
+        encoded_path = base64.b64encode(video['path'].encode()).decode()
+        
+        response_template["channels"].append(create_channel_item(
+            title=video['title'],
+            icon=url_for("resources", res="film.png", _external=True),
+            description=f"Путь: {video['relative_path']}",
+            stream_url=f"{request.host_url}serve_local_video?path={encoded_path}",
+            menu=[{
+                "title": "Добавить в избранное",
+                "playlist_url": f"{request.host_url}add_local_to_fav?path={encoded_path}&title={base64.b64encode(video['title'].encode()).decode()}"
+            }]
+        ))
+    
+    return jsonify(response_template)
+
+@app.route("/serve_local_video", strict_slashes=False)
+def serve_local_video():
+    """Serve local video file"""
+    try:
+        file_path = base64.b64decode(request.args.get("path")).decode()
+        
+        # Проверяем, что файл находится в разрешенной директории
+        is_allowed = False
+        for allowed_dir in config.LOCAL_VIDEO_DIRS:
+            if file_path.startswith(allowed_dir):
+                is_allowed = True
+                break
+        
+        if not is_allowed or not os.path.exists(file_path):
+            return "File not found or access denied", 404
+        
+        # Определяем MIME-тип
+        mime_type, _ = mimetypes.guess_type(file_path)
+        if not mime_type:
+            mime_type = 'video/mp4'  # Дефолтный тип
+        
+        file_size = os.path.getsize(file_path)
+        range_header = request.headers.get('Range', None)
+        
+        if range_header:
+            # Обработка запроса на частичную загрузку
+            from werkzeug.http import parse_range_header
+            
+            range_obj = parse_range_header(range_header, file_size)
+            if range_obj is None:
+                return "Invalid range header", 416
+            
+            ranges = range_obj.ranges
+            if len(ranges) != 1:
+                return "Multiple ranges not supported", 416
+            
+            start, end = ranges[0]
+            # Если end не указан, устанавливаем его как конец файла
+            if end is None:
+                end = file_size - 1
+            
+            if start >= file_size or end >= file_size:
+                return "Range not satisfiable", 416
+            
+            length = end - start + 1
+            
+            def generate():
+                with open(file_path, 'rb') as f:
+                    f.seek(start)
+                    remaining = length
+                    while remaining > 0:
+                        chunk_size = min(8192, remaining)
+                        chunk = f.read(chunk_size)
+                        if not chunk:
+                            break
+                        yield chunk
+                        remaining -= len(chunk)
+            
+            response = Response(generate(), status=206, mimetype=mime_type)
+            response.headers['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+            response.headers['Content-Length'] = length
+            response.headers['Accept-Ranges'] = 'bytes'
+            return response
+        
+        # Полная загрузка файла с поддержкой range requests
+        response = send_file(
+            file_path,
+            mimetype=mime_type,
+            as_attachment=False,
+            conditional=True
+        )
+        response.headers['Accept-Ranges'] = 'bytes'
+        return response
+        
+    except Exception as e:
+        print(f"Error serving local video: {e}")
+        import traceback
+        traceback.print_exc()
+        return "Internal server error", 500
+
+        
 def initialize_app():
     """Initialize application on startup"""
     print("Initializing application...")

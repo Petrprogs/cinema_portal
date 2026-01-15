@@ -1,5 +1,7 @@
 import json
 from functools import wraps
+import os
+from pathlib import Path
 from flask import request
 
 # === JSON helpers ===
@@ -49,3 +51,24 @@ def clean_url_from_unwanted_params(url):
         new_query,
         parsed.fragment
     ))
+
+
+def scan_local_videos(dirs):
+    """Scan configured directories for video files"""
+    video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.m3u8'}
+    video_files = []
+    
+    for directory in dirs:
+        if os.path.exists(directory):
+            for root, _, files in os.walk(directory):
+                for file in files:
+                    if Path(file).suffix.lower() in video_extensions:
+                        rel_path = os.path.relpath(os.path.join(root, file), directory)
+                        video_files.append({
+                            'title': file,
+                            'path': os.path.join(root, file),
+                            'relative_path': rel_path,
+                            'directory': directory
+                        })
+    
+    return video_files
