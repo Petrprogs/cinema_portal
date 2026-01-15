@@ -104,7 +104,8 @@ class VideoBalancersApi():
             print("Found hdrezka")
             self.url = rezka.url
             result.append("hdRezka")
-
+        if config.RUTRACKER_USERNAME and config.RUTRACKER_PASSWORD:
+            result.append("rutracker")
         return result
 
     def get_provider(self, name, search_data=None):

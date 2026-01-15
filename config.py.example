@@ -14,3 +14,6 @@ FFMPEG_OUTPUT_DIR = 'hls_output'
 LOCAL_VIDEO_DIRS = [
     "./"
 ]
+
+RUTRACKER_USERNAME = "username"
+RUTRACKER_PASSWORD = "strongpassword"

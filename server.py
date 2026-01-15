@@ -3,6 +3,7 @@ import base64
 import mimetypes
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import subprocess
@@ -24,7 +25,7 @@ from flask_cors import CORS
 import VideoBalancersApi
 from VideoBalancersApi import fetch_and_update_api_base_url
 from utils import *
-from videobalancers import HdRezkaApi
+from videobalancers import HdRezkaApi, RutrackerApi
 try:
     import config
 except ImportError:
@@ -509,6 +510,9 @@ def handle_turbo_cdn(response_template, cdn_name):
     ).get_provider(cdn_name, query_params)
     if cdn_name == "hdRezka":
         return redirect(f"{request.host_url}process_item?url={app_state['balancers_api'].url}", 302)
+    elif cdn_name == "rutracker":
+        return redirect(f"{request.host_url}/tracker/process_item?kp_id={kp_id}", 302)
+        
     
     if hasattr(app_state["balancers_api"], 'getSeasons'):
         seasons = app_state["balancers_api"].getSeasons()
@@ -775,6 +779,106 @@ def serve_local_video():
         traceback.print_exc()
         return "Internal server error", 500
 
+@app.route("/tracker/process_item", strict_slashes=False)
+def process_tracker_item():
+    if request.args.get("id"):
+        return handle_topic(request.args.get("id"))
+    elif request.args.get("kp_id"):
+        return handle_tracker_search(request.args.get("kp_id"))
+
+def handle_tracker_search(kp_id: int):
+    search_data = load_json("templates/search_result_page.json")
+    #kp_id = request.args.get("id")
+    # Use title from mapping if needed
+    title = app_state.get('kp_id_to_title', {}).get(str(kp_id)).replace(")", "").replace("(", "")[:-1] + "*"
+    print(title)
+    if config.RUTRACKER_PROXY:
+        tracker = RutrackerApi.Rutracker(config.RUTRACKER_USERNAME, config.RUTRACKER_PASSWORD, "https://rutracker.org/", proxies={'http': config.RUTRACKER_PROXY, 'https': config.RUTRACKER_PROXY})
+    else:
+        tracker = RutrackerApi.Rutracker(config.RUTRACKER_USERNAME, config.RUTRACKER_PASSWORD, "https://rutracker.org/")
+    search_items = tracker.search(title)
+    for item in search_items:
+        if not ("кино" in item[0].lower() or "фильм" in item[0].lower() or "сериал" in item[0].lower()):
+            continue
+        description = f"Категория: {item[0]}\nРазмер: {tracker._convert_size_inverted(item[3])}\nСиды: {item[4]}\nЛичи: {item[5]}"
+        search_data["channels"].append(create_channel_item(
+                title=item[1],
+                icon=url_for("resources", res="film.png", _external=True),
+                description=description,
+                playlist_url=f"{request.host_url}tracker/process_item?id={item[2]}"
+            ))
+    return jsonify(search_data)
+
+def handle_topic(topic_id: int):
+    search_data = load_json("templates/search_result_page.json")
+    if config.RUTRACKER_PROXY:
+        tracker = RutrackerApi.Rutracker(config.RUTRACKER_USERNAME, config.RUTRACKER_PASSWORD, "https://rutracker.org/", proxies={'http': config.RUTRACKER_PROXY, 'https': config.RUTRACKER_PROXY})
+    else:
+        tracker = RutrackerApi.Rutracker(config.RUTRACKER_USERNAME, config.RUTRACKER_PASSWORD, "https://rutracker.org/")
+    magnet = tracker.get_magnet_link(topic_id)
+    streams = subprocess.run(f'API_PASSWORD="myapipassword" htorrent info -m="{magnet}"', shell=True, capture_output=True).stdout.decode()
+    print(streams)
+    result = []
+    lines = streams.strip().split('\n')
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip()
+        
+        # Look for file entries
+        if line.strip().startswith('- path:'):
+            # Extract path and get filename
+            path_match = re.search(r'path:\s*(.+)', line)
+            if path_match:
+                path = path_match.group(1).strip()
+                # Extract filename (last part after /)
+                filename = path.split('/')[-1]
+                
+                # Get length from next line
+                if i + 1 < len(lines):
+                    length_line = lines[i + 1].rstrip()
+                    length_match = re.search(r'length:\s*(\d+)', length_line)
+                    if length_match:
+                        size_bytes = int(length_match.group(1))
+                        
+                        # Convert to human readable format
+                        if size_bytes >= 1024**3:
+                            size_human = f"{size_bytes / 1024**3:.2f} GB"
+                        elif size_bytes >= 1024**2:
+                            size_human = f"{size_bytes / 1024**2:.2f} MB"
+                        elif size_bytes >= 1024:
+                            size_human = f"{size_bytes / 1024:.2f} KB"
+                        else:
+                            size_human = f"{size_bytes} B"
+                        
+                        # Get URL from line after length
+                        if i + 2 < len(lines):
+                            url_line = lines[i + 2].rstrip()
+                            url_match = re.search(r'streamURL:\s*(.+)', url_line)
+                            if url_match:
+                                url = url_match.group(1).strip()
+                                
+                                # Add to result
+                                result.append({
+                                    'name': filename,
+                                    'size_bytes': size_bytes,
+                                    'size_human': size_human,
+                                    'url': url,
+                                    'original_path': path  # Optional: include if needed
+                                })
+                                
+                                # Skip the next two lines we've already processed
+                                i += 2
+        i += 1
+    for item in result:
+        description = f"{item['name']}\nРазмер: {item['size_human']}"
+        search_data["channels"].append(create_channel_item(
+                title=item["name"],
+                icon=url_for("resources", res="film.png", _external=True),
+                description=description,
+                stream_url=item["url"].replace("localhost", request.host.split(":")[0] if ":" in request.host else request.host)
+            ))
+    return jsonify(search_data)
         
 def initialize_app():
     """Initialize application on startup"""
