@@ -787,9 +787,24 @@ def process_tracker_item():
         return handle_tracker_search(request.args.get("kp_id"))
 
 def handle_tracker_search(kp_id: int):
+    def prioritize_hd_content(title):
+        """Определение приоритета HD контента"""
+        hd_priority = {
+            "1080p": 3,  # Высший приоритет
+            "720p": 2,
+            "hdrip": 2,
+            "bdrip": 2,
+            "web-dl": 2,
+            "hdtv": 1
+        }
+        
+        for quality, priority in hd_priority.items():
+            if quality in title.lower():
+                return priority
+        
+        return 0
     search_data = load_json("templates/search_result_page.json")
-    #kp_id = request.args.get("id")
-    # Use title from mapping if needed
+
     title = app_state.get('kp_id_to_title', {}).get(str(kp_id)).replace(")", "").replace("(", "")[:-1] + "*"
 
     if config.RUTRACKER_PROXY:
@@ -797,10 +812,30 @@ def handle_tracker_search(kp_id: int):
     else:
         tracker = RutrackerApi.Rutracker(config.RUTRACKER_USERNAME, config.RUTRACKER_PASSWORD, "https://rutracker.org/")
     search_items = tracker.search(title)
+    filtered_items = []
     for item in search_items:
-        if not ("кино" in item[0].lower() or "фильм" in item[0].lower() or "сериал" in item[0].lower()):
+        item_title = item[1].lower()
+        item_category = item[0].lower()
+        
+        if not any(keyword in item_category for keyword in ["кино", "фильм", "сериал"]):
             continue
         
+        if any(keyword in item_title for keyword in ["4k", "uhd", "2160p"]):
+            continue
+        
+        quality_score = prioritize_hd_content(item_title)
+        
+        filtered_items.append({
+            'item': item,
+            'quality_score': quality_score
+        })
+
+    # Сортировка по качеству (лучшие HD версии первыми)
+    filtered_items.sort(key=lambda x: x['quality_score'], reverse=True)
+
+    # Добавление в результат
+    for filtered in filtered_items:
+        item = filtered['item']
         description = f"Категория: {item[0]}\nРазмер: {tracker._convert_size_inverted(item[3])}\nСиды: {item[4]}\nЛичи: {item[5]}"
         search_data["channels"].append(create_channel_item(
                 title=item[1],
