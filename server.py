@@ -878,7 +878,7 @@ def handle_topic(topic_id: int):
                                 i += 2
         i += 1
     for item in result:
-        description = f"{item['name']}\nВидео: {video_codecs}\n{audio_tracks}\nРазмер: {item['size_human']}\n"
+        description = f"{item['name']}<br>Видео: {video_codecs}<br>{audio_tracks}<br>Размер: {item['size_human']}\n"
         search_data["channels"].append(create_channel_item(
                 title=item["name"],
                 icon=url_for("resources", res="film.png", _external=True),
