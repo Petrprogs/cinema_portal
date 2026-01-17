@@ -856,7 +856,7 @@ def handle_topic(topic_id: int):
     video_codecs = re.findall(r"(?:Формат\s+)?[Вв]идео:\s*(.+)", description)
     audio_tracks = re.findall(r"(Аудио\s*\d*:\s*(.+))", description)
     if len(video_codecs) > 0:
-        video_codecs = video_codecs[0]
+        video_codecs = video_codecs[-1]
     if len(audio_tracks) > 0:
         audio_tracks = "<br>".join([item[0] for item in audio_tracks])
     streams = subprocess.run(f'API_PASSWORD="myapipassword" htorrent info -m="{magnet}"', shell=True, capture_output=True).stdout.decode()
