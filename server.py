@@ -791,7 +791,7 @@ def handle_tracker_search(kp_id: int):
     #kp_id = request.args.get("id")
     # Use title from mapping if needed
     title = app_state.get('kp_id_to_title', {}).get(str(kp_id)).replace(")", "").replace("(", "")[:-1] + "*"
-    print(title)
+
     if config.RUTRACKER_PROXY:
         tracker = RutrackerApi.Rutracker(config.RUTRACKER_USERNAME, config.RUTRACKER_PASSWORD, "https://rutracker.org/", proxies={'http': config.RUTRACKER_PROXY, 'https': config.RUTRACKER_PROXY})
     else:
@@ -800,6 +800,7 @@ def handle_tracker_search(kp_id: int):
     for item in search_items:
         if not ("кино" in item[0].lower() or "фильм" in item[0].lower() or "сериал" in item[0].lower()):
             continue
+        
         description = f"Категория: {item[0]}\nРазмер: {tracker._convert_size_inverted(item[3])}\nСиды: {item[4]}\nЛичи: {item[5]}"
         search_data["channels"].append(create_channel_item(
                 title=item[1],
@@ -816,8 +817,14 @@ def handle_topic(topic_id: int):
     else:
         tracker = RutrackerApi.Rutracker(config.RUTRACKER_USERNAME, config.RUTRACKER_PASSWORD, "https://rutracker.org/")
     magnet = tracker.get_magnet_link(topic_id)
+    description = tracker.get_info(topic_id)
+    video_codecs = re.findall(r"Формат видео:\s*(.+)", description)
+    audio_tracks = re.findall(r"(Аудио\s*\d*:\s*(.+))", description)
+    if len(video_codecs) > 0:
+        video_codecs = video_codecs[0]
+    if len(audio_tracks) > 0:
+        audio_tracks = "\n".join([item[0] for item in audio_tracks])
     streams = subprocess.run(f'API_PASSWORD="myapipassword" htorrent info -m="{magnet}"', shell=True, capture_output=True).stdout.decode()
-    print(streams)
     result = []
     lines = streams.strip().split('\n')
     
@@ -871,7 +878,7 @@ def handle_topic(topic_id: int):
                                 i += 2
         i += 1
     for item in result:
-        description = f"{item['name']}\nРазмер: {item['size_human']}"
+        description = f"{item['name']}\nВидео: {video_codecs}\n{audio_tracks}\nРазмер: {item['size_human']}\n"
         search_data["channels"].append(create_channel_item(
                 title=item["name"],
                 icon=url_for("resources", res="film.png", _external=True),
@@ -898,10 +905,9 @@ def shutdown_handler(signum=None, frame=None):
     sys.exit()
 
 if __name__ == "__main__":
-    initialize_app()
-
-    atexit.register(shutdown_handler)
-    signal.signal(signal.SIGINT, shutdown_handler)
-    signal.signal(signal.SIGTERM, shutdown_handler)
-    
     app.run(host="0.0.0.0", port=5001)
+
+initialize_app()
+atexit.register(shutdown_handler)
+signal.signal(signal.SIGINT, shutdown_handler)
+signal.signal(signal.SIGTERM, shutdown_handler)
