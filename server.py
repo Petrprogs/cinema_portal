@@ -921,6 +921,8 @@ def handle_topic(topic_id: int):
                                 i += 2
         i += 1
     for item in result:
+        if item["name"].endswith(".srt"):
+                    continue
         description = f"{item['name']}<br>Видео: {video_codecs}<br>{audio_tracks}<br>Размер: {item['size_human']}\n"
         search_data["channels"].append(create_channel_item(
                 title=item["name"],

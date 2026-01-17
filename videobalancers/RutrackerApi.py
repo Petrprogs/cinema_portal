@@ -207,7 +207,6 @@ class Rutracker:
         raw = self._ask_tracker('viewtopic', topic_id=str(topic_id))
         soup = BeautifulSoup(raw, 'html.parser')
         magnet_tag = soup.find_all('a', class_='magnet-link')
-        print(magnet_tag)
         magnet_tag = magnet_tag[0]
         # Extract the href attribute
         if magnet_tag and 'href' in magnet_tag.attrs:
