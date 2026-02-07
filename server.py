@@ -23,7 +23,6 @@ from flask_caching import Cache
 from flask_cors import CORS
 
 import VideoBalancersApi
-from VideoBalancersApi import fetch_and_update_api_base_url
 from utils import *
 from videobalancers import HdRezkaApi, RutrackerApi
 try:
@@ -417,10 +416,11 @@ def turbo_search():
     if 'kp_id_to_title' not in app_state:
         app_state['kp_id_to_title'] = {}
 
-    for item in search_result:
+    for item in search_result["films"]:
         # Store mapping for later use
-        app_state['kp_id_to_title'][str(item['id'])] = item['title']
-        description_text = item["raw_data"]["description"]
+        app_state['kp_id_to_title'][str(item['filmId'])] = item['nameRu']
+        print(item)
+        description_text = item["description"] if item.get("description") else ""
         if description_text:
             # Find the position of the second period
             first_period = description_text.find(".")
@@ -433,21 +433,21 @@ def turbo_search():
             description_slice = ""
 
         description = (
-            f'<img style="float: left; padding-right: 15px" src="{item["poster"]}">'
-            f'{item["raw_data"]["year"]}<br>'
-            f'{", ".join(country["country"] for country in item["raw_data"]["countries"])}<br>'
-            f'Жанры: {", ".join(genre["genre"] for genre in item["raw_data"]["genres"])}<br>'
-            f'Оценка Кинопоиск: {item["raw_data"]["rating"]}<br>'
+            f'<img style="float: left; padding-right: 15px" src="{item["posterUrlPreview"]}">'
+            f'{item["year"]}<br>'
+            f'{", ".join(country["country"] for country in item["countries"])}<br>'
+            f'Жанры: {", ".join(genre["genre"] for genre in item["genres"])}<br>'
+            f'Оценка Кинопоиск: {item["rating"]}<br>'
             f'{description_slice}'
         )
         search_data["channels"].append(create_channel_item(
-            title=item["title"],
+            title=item["nameRu"],
             icon=url_for("resources", res="film.png", _external=True),
             description=description,
-            playlist_url=f"{request.host_url}turbo/process_item?id={item['id']}",  # No title in URL
+            playlist_url=f"{request.host_url}turbo/process_item?id={item['filmId']}",  # No title in URL
             menu=[{
                 "title": "В избранное", 
-                "playlist_url": f"{request.host_url}add_to_fav?url={request.host_url}turbo/process_item?id={item['id']}"
+                "playlist_url": f"{request.host_url}add_to_fav?url={request.host_url}turbo/process_item?id={item['filmId']}"
             }]
         ))
     
@@ -853,9 +853,9 @@ def handle_topic(topic_id: int):
         tracker = RutrackerApi.Rutracker(config.RUTRACKER_USERNAME, config.RUTRACKER_PASSWORD, "https://rutracker.org/")
     magnet = tracker.get_magnet_link(topic_id)
     description = tracker.get_info(topic_id)
-    #print(description)
+    print(description)
     video_codecs = re.findall(r"(?:Формат\s+)?[Вв]идео\s*:\s*(.+)", description)
-    audio_tracks = re.findall(r"(Аудио\s*\d*:\s*(.+))", description)
+    audio_tracks = re.findall(r"(Аудио\s*\d*\s*:?\s*(?:[A-Za-z]{2,3})(?:\s*:\s*|\s+)(?:[A-Z][-\sA-Z]+\s*)?(.+))", description)
     if len(video_codecs) > 0:
         video_codecs = video_codecs[-1].replace("\n", "").strip()
         match = re.match(r'^(\S+)(\s+)?', video_codecs)
