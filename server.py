@@ -113,48 +113,6 @@ def create_channel_item(title, icon, description=None, playlist_url=None, menu=N
         item["subtitles"] = subtitles
     return item
 
-def initialize_ffmpeg(stream_url, host, origin="", referer="", proxy=""):
-    """Initialize the FFmpeg process before the first request."""
-    if app_state['data'].get("drc_stream") != stream_url:
-        if app_state['ffmpeg_process']:
-            app_state['ffmpeg_process'].kill()
-        
-        app_state['data']["drc_stream"] = stream_url
-        start_ffmpeg(stream_url, host, origin, referer, proxy)
-        app_state['ffmpeg_process'] = None
-
-def start_ffmpeg(mp4_url, host, origin="", referer="", proxy=""):
-    """Start the FFmpeg process to convert the MP4 stream into HLS segments."""
-    shutil.rmtree(config.FFMPEG_OUTPUT_DIR, ignore_errors=True)
-    os.makedirs(config.FFMPEG_OUTPUT_DIR, exist_ok=True)
-    
-    ffmpeg_command = [
-        'ffmpeg',
-        '-copyts',
-        '-user_agent', 'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0',
-        '-i', mp4_url,
-        '-hls_base_url', host,
-        '-filter_complex', 'compand=attacks=0:points=-80/-900|-45/-15|-27/-9|0/-7|20/-7:gain=5',
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-f', 'hls',
-        '-hls_time', '3',
-        '-hls_list_size', '0',
-        '-hls_playlist_type', 'event',
-        '-hls_flags', 'append_list',
-        '-hls_segment_filename', os.path.join(config.FFMPEG_OUTPUT_DIR, 'segment%03d.ts'),
-        os.path.join(config.FFMPEG_OUTPUT_DIR, 'stream.m3u8'),
-    ]
-    
-    if origin:
-        ffmpeg_command[2:2] = ["-headers", f"Origin: {origin}"]
-    if referer:
-        ffmpeg_command[2:2] = ["-headers", f"Referer: {referer}"]
-    if proxy:
-        ffmpeg_command[2:2] = ["-http_proxy", "bot0TN93:wLiPe9hNN8@45.151.98.28:50100"]
-    
-    return subprocess.Popen(ffmpeg_command)
-
 # Routes
 @app.route("/")
 @auth_required
@@ -233,27 +191,6 @@ def rem_from_fav():
     })
     return jsonify(feed_response)
 
-@app.route('/stream.m3u8')
-def serve_playlist():
-    """Serve the HLS playlist (m3u8 file)."""
-    initialize_ffmpeg(
-        request.args.get("stream"),
-        request.host_url,
-        request.args.get("origin"),
-        request.args.get("referer"),
-        request.args.get("proxy")
-    )
-    
-    while not os.path.exists(f"{config.FFMPEG_OUTPUT_DIR}/stream.m3u8"):
-        pass
-    
-    return send_from_directory(config.FFMPEG_OUTPUT_DIR, 'stream.m3u8', mimetype='application/vnd.apple.mpegurl')
-
-@app.route('/segment<count>.ts')
-def serve_segment(count):
-    """Serve the HLS segment files (.ts)."""
-    return send_from_directory(config.FFMPEG_OUTPUT_DIR, f'segment{count}.ts', mimetype='video/MP2T')
-
 @app.route("/process_item/", strict_slashes=False)
 @cache.cached(query_string=True)
 def process_item():
@@ -288,14 +225,6 @@ def handle_episode(response_template, url):
             parser=f"{request.host_url}mark_watched?url={url}&e={request.args.get('e')}&s={request.args.get('s')}",
             stream_url=clean_url
         ))
-        
-        if res == "1080p":
-            response_template["channels"].append(create_channel_item(
-                title=f"{app_state['rezka'].name} {res} DRC",
-                parser=f"{request.host_url}mark_watched?url={url}",
-                icon=url_for("resources", res="film.png", _external=True),
-                stream_url=f"{request.host_url}stream.m3u8?stream={clean_url}"
-            ))
     
     return jsonify(response_template)
 
@@ -339,13 +268,6 @@ def handle_translation(response_template, url):
                 stream_url=clean_url,
                 subtitles=subs
             ))
-            
-            if res == "1080p":
-                response_template["channels"].append(create_channel_item(
-                    title=f"{app_state['rezka'].name} {res} DRC",
-                    icon=url_for("resources", res="film.png", _external=True),
-                    stream_url=f"{request.host_url}stream.m3u8?stream={clean_url}"
-                ))
         
         return jsonify(response_template)
 
@@ -418,7 +340,7 @@ def turbo_search():
 
     for item in search_result["films"]:
         # Store mapping for later use
-        app_state['kp_id_to_title'][str(item['filmId'])] = item['nameRu']
+        app_state['kp_id_to_title'][str(item['filmId'])] = item['nameEn'] if item.get("nameEn") else item['nameRu']
         print(item)
         description_text = item["description"] if item.get("description") else ""
         if description_text:
@@ -577,12 +499,6 @@ def handle_turbo_translation(response_template, kp_id, tr_index):
             icon=url_for("resources", res="film.png", _external=True),
             stream_url=f"{request.host_url}turbo/redir?url={stream_url}"
         ))
-        if quality in ("1080p", "720p", "1080", "720"):
-            response_template["channels"].append(create_channel_item(
-                title=f"{search_title} {quality} DRC",
-                icon=url_for("resources", res="film.png", _external=True),
-                stream_url=f"{request.host_url}stream.m3u8?stream={stream_url}"
-            ))
     return jsonify(response_template)
 
 def handle_turbo_season(response_template, kp_id, season):
@@ -644,28 +560,12 @@ def handle_turbo_series_translation(response_template, kp_id, season, episode, t
             stream_url=f"{request.host_url}turbo/redir?url={stream_url.replace('https','http')}"
         ))
         
-        if quality in ("1080p", "720p", "1080", "720"):
-            response_template["channels"].append(create_channel_item(
-                title=f"{quality} DRC",
-                icon=url_for("resources", res="film.png", _external=True),
-                stream_url=f"{request.host_url}stream.m3u8?stream={stream_url}"
-            ))
-    
     return jsonify(response_template)
 
 @app.route("/turbo/redir", strict_slashes=False)
 def stream_redirect():
     """Redirect to the actual stream URL."""
-    return redirect(app_state["balancers_api"].getStream(request.args.get("url")), code=302)
-
-@app.route('/update_balancer_domain', methods=['GET'])
-@auth_required
-def update_balancer_domain():
-    new_domain = fetch_and_update_api_base_url()
-    if new_domain:
-        return jsonify({'success': True, 'new_domain': new_domain})
-    else:
-        return jsonify({'success': False, 'error': 'Failed to fetch or parse new domain'}), 500
+    return redirect(app_state["balancers_api"].getStream(request.args.get("url")), code=302)    
 
 @app.route("/local_videos/", strict_slashes=False)
 @auth_required
