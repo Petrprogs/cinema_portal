@@ -363,7 +363,7 @@ def turbo_search():
             f'{description_slice}'
         )
         search_data["channels"].append(create_channel_item(
-            title=item["nameRu"],
+            title=item['nameRu'] if item.get("nameRu") else item['nameEn'],
             icon=url_for("resources", res="film.png", _external=True),
             description=description,
             playlist_url=f"{request.host_url}turbo/process_item?id={item['filmId']}",  # No title in URL
