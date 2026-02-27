@@ -324,8 +324,9 @@ class HdRezkaApi:
                 headers=self.HEADERS,
             )
             r = r.json()
+            print(r)
             if r["success"]:
-                arr = self.clearTrash(r["url"]).split(",")
+                arr = r["url"].split(",")
                 stream = HdRezkaStream(
                     season,
                     episode,
