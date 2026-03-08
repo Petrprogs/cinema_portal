@@ -113,6 +113,7 @@ class Rutracker:
 
         """
         self.logger.info('Searching for \'{}\''.format(search_line))
+        print(search_line)
         raw = self._ask_tracker('search', search=search_line)
         soup = BeautifulSoup(raw, 'html.parser')
 

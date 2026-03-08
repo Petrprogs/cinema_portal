@@ -1,3 +1,34 @@
 {
-  "watched": []
+  "watched": [
+    {
+      "url": "https://rezka.fi/films/drama/14605-dzhuzeppe-moskati-iscelyayuschaya-lyubov-2007.html",
+      "episode": null,
+      "season": null
+    },
+    {
+      "url": "https://rezka.fi/series/drama/40659-severnye-vody-2021.html",
+      "episode": null,
+      "season": null
+    },
+    {
+      "url": "https://rezka.fi/series/drama/25660-ohotnik-za-razumom-2017.html",
+      "episode": null,
+      "season": null
+    },
+    {
+      "url": "https://rezka.fi/series/drama/81620-chernyy-krolik-2025-latest.html",
+      "episode": null,
+      "season": null
+    },
+    {
+      "url": "https://rezka.fi/series/drama/76523-bolnica-pitt-2025-latest.html",
+      "episode": null,
+      "season": null
+    },
+    {
+      "url": "https://rezka.fi/series/comedy/29593-ueyn-2019.html",
+      "episode": null,
+      "season": null
+    }
+  ]
 }

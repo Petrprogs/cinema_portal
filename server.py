@@ -340,7 +340,7 @@ def turbo_search():
 
     for item in search_result["films"]:
         # Store mapping for later use
-        app_state['kp_id_to_title'][str(item['filmId'])] = item['nameEn'] if item.get("nameEn") else item['nameRu']
+        app_state['kp_id_to_title'][str(item['filmId'])] = item['nameEn'] + " " + item['year'] if item.get("nameEn") else item['nameRu']
         print(item)
         description_text = item["description"] if item.get("description") else ""
         if description_text:
@@ -704,7 +704,6 @@ def handle_tracker_search(kp_id: int):
         
         return 0
     search_data = load_json("templates/search_result_page.json")
-
     title = app_state.get('kp_id_to_title', {}).get(str(kp_id)).replace(")", "").replace("(", "")[:-1] + "*"
 
     if config.RUTRACKER_PROXY:

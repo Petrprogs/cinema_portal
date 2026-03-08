@@ -62,7 +62,8 @@ class HdRezkaStream:
         return f"<HdRezkaStream(season:{self.season}, episode:{self.episode})>"
 
     def __call__(self, resolution):
-        coincidences = list(filter(lambda x: str(resolution) in x, self.videos))
+        coincidences = list(
+            filter(lambda x: str(resolution) in x, self.videos))
         if len(coincidences) > 0:
             return self.videos[coincidences[0]]
         raise ValueError(f'Resolution "{resolution}" is not defined')
@@ -153,7 +154,8 @@ class HdRezkaApi:
         try:
             response = requests.get(
                 f"https://{self.baseurl}/search/",
-                params={"do": "search", "subaction": "search", "q": self.search_data["query"]},
+                params={"do": "search", "subaction": "search",
+                        "q": self.search_data["query"]},
                 headers=self.HEADERS,
                 cookies=self.COOKIES,
                 timeout=10,
@@ -267,7 +269,8 @@ class HdRezkaApi:
                 if "current" in i.attrs["class"]:
                     other.append({i.find(class_="title").text: self.url})
                 else:
-                    other.append({i.find(class_="title").text: i.attrs["data-url"]})
+                    other.append(
+                        {i.find(class_="title").text: i.attrs["data-url"]})
         return other
 
     @staticmethod
@@ -326,25 +329,11 @@ class HdRezkaApi:
         return arr
 
     def getStream(self, season=None, episode=None, translation=None, index=0):
-        streams = self.soup.select_one(
-            "body > script:nth-child(12)").text.split("false, ")[-1].split("); ")[0]
-        print(streams)
-        streams = json.loads(streams)
-        arr = streams["streams"].split(",")
-        stream = HdRezkaStream(
-            season,
-            episode,
-            subtitles={"data": streams["subtitle"],
-                       "codes": streams["subtitle_lns"]},
-            )
-        for i in arr:
-            res = i.split("[")[1].split("]")[0]
-            video = i.split("[")[1].split("]")[1].split(" or ")[1]
-            stream.append(res, video)
-        return stream
         def makeRequest(data):
+            print(data)
             r = requests.post(
-                "https://" + self.baseurl + "/ajax/get_cdn_series/",
+                "https://" + self.baseurl +
+                f"/ajax/get_cdn_series/?{str(time.time()).split('.')[0]}",
                 data=data,
                 cookies=self.COOKIES,
                 headers=self.HEADERS,
@@ -356,7 +345,8 @@ class HdRezkaApi:
                 stream = HdRezkaStream(
                     season,
                     episode,
-                    subtitles={"data": r["subtitle"], "codes": r["subtitle_lns"]},
+                    subtitles={"data": r["subtitle"],
+                               "codes": r["subtitle_lns"]},
                 )
                 for i in arr:
                     res = i.split("[")[1].split("]")[0]
@@ -399,7 +389,10 @@ class HdRezkaApi:
 
         def getStreamMovie(self, translation_id):
             return makeRequest(
-                {"id": self.id, "translator_id": translation_id, "action": "get_movie"}
+                {"id": self.id, "translator_id": translation_id, "action": "get_movie",  'is_camrip': '0',
+                 'is_ads': '0',
+                 'is_director': '1',
+                 'favs': '76998aac-4960-4d94-bb8c-22705e5fe623', }
             )
 
         if not self.translators:
@@ -435,7 +428,7 @@ class HdRezkaApi:
         season = str(season)
 
         if not progress:
-            progress = lambda cur, all: print(f"{cur}/{all}", end="\r")
+            def progress(cur, all): return print(f"{cur}/{all}", end="\r")
 
         if not self.translators:
             self.translators = self.getTranslations()
@@ -495,12 +488,14 @@ class HdRezkaApi:
                         streams[ep_id] = None
                         progress(len(streams), series_length)
 
-            t = threading.Thread(target=make_call, args=(episode_id,), daemon=True)
+            t = threading.Thread(
+                target=make_call, args=(episode_id,), daemon=True)
             t.start()
             threads.append(t)
 
         for t in threads:
             t.join()
 
-        sorted_streams = {k: streams[k] for k in sorted(streams, key=lambda x: int(x))}
+        sorted_streams = {k: streams[k]
+                          for k in sorted(streams, key=lambda x: int(x))}
         return sorted_streams
