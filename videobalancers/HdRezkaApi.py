@@ -74,8 +74,20 @@ class HdRezkaApi:
     def __init__(self, url, search_data=None, email=None, password=None):
         self.baseurl = "rezka.fi"
         self.HEADERS = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36"
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0',
+            'Accept': '*/*',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+            # 'Accept-Encoding': 'gzip, deflate, br, zstd',
+            'Connection': 'keep-alive',
+            'Referer': 'https://rezka.fi/films/action/6634-potroshiteli-2010.html',
+            # 'Cookie': 'dle_user_taken=1; dle_user_token=68d02e2d20481394709fb707553d5a21; PHPSESSID=qo2hep2p94a9jlfvvhpqcljbp1; dle_user_id=1802369; dle_password=1d1fa1c75f6bf600106d41b79d26a651; dle_newpm=0',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache',
         }
+
         self.COOKIES = {}
         self.authorize(email, password)
         self.found_item = False
@@ -123,9 +135,7 @@ class HdRezkaApi:
         )
         if auth_req.json()["success"] == True:
             self.COOKIES = auth_req.cookies.get_dict()
-            del self.COOKIES["PHPSESSID"]
             print(self.COOKIES)
-            self.COOKIES.update({"hdmbbs": "1"})
             with open("rezka_cookies", "w") as fl:
                 fl.write(json.dumps(self.COOKIES, indent=4))
         else:
@@ -316,6 +326,22 @@ class HdRezkaApi:
         return arr
 
     def getStream(self, season=None, episode=None, translation=None, index=0):
+        streams = self.soup.select_one(
+            "body > script:nth-child(12)").text.split("false, ")[-1].split("); ")[0]
+        print(streams)
+        streams = json.loads(streams)
+        arr = streams["streams"].split(",")
+        stream = HdRezkaStream(
+            season,
+            episode,
+            subtitles={"data": streams["subtitle"],
+                       "codes": streams["subtitle_lns"]},
+            )
+        for i in arr:
+            res = i.split("[")[1].split("]")[0]
+            video = i.split("[")[1].split("]")[1].split(" or ")[1]
+            stream.append(res, video)
+        return stream
         def makeRequest(data):
             r = requests.post(
                 "https://" + self.baseurl + "/ajax/get_cdn_series/",
