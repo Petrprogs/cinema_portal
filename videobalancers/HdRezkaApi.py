@@ -391,8 +391,8 @@ class HdRezkaApi:
             return makeRequest(
                 {"id": self.id, "translator_id": translation_id, "action": "get_movie",  'is_camrip': '0',
                  'is_ads': '0',
-                 'is_director': '1',
-                 'favs': '76998aac-4960-4d94-bb8c-22705e5fe623', }
+                 'is_director': '0',
+                 'favs': self.soup.find(id="ctrl_favs").attrs["value"] }
             )
 
         if not self.translators:
