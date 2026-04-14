@@ -19,3 +19,5 @@ RUTRACKER_USERNAME = "username"
 RUTRACKER_PASSWORD = "strongpassword"
 
 KINOPOISK_API_KEY = "api_key_here"
+
+ENABLE_RUTUBE = False

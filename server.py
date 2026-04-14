@@ -8,7 +8,9 @@ import shutil
 import signal
 import subprocess
 import sys
+from urllib.parse import quote_plus, unquote_plus
 
+import yt_dlp
 from flask import (
     Flask,
     Response,
@@ -24,7 +26,7 @@ from flask_cors import CORS
 
 import VideoBalancersApi
 from utils import *
-from videobalancers import HdRezkaApi, RutrackerApi
+from videobalancers import FilmachRutube, HdRezkaApi, RutrackerApi
 try:
     import config
 except ImportError:
@@ -43,7 +45,9 @@ app_state = {
     'ffmpeg_process': None,
     'data': {},
     'rezka': None,
-    'balancers_api': None
+    'balancers_api': None,
+    'kp_id_to_title': {},
+    'kp_id_to_title_rus': {}
 }
 
 def save_app_state():
@@ -54,7 +58,8 @@ def save_app_state():
             'data': app_state.get('data', {}),
             'rezka_url': app_state.get('rezka').url if app_state.get('rezka') else None,
             'balancers_api_data': getattr(app_state.get('balancers_api'), '__dict__', {}) if app_state.get('balancers_api') else {},
-            'kp_id_to_title': app_state.get('kp_id_to_title', {})
+            'kp_id_to_title': app_state.get('kp_id_to_title', {}),
+            'kp_id_to_title_rus': app_state.get('kp_id_to_title_rus', {})
         }
         
         with open('app_state.json', 'w', encoding='utf-8') as f:
@@ -73,6 +78,7 @@ def load_app_state():
             # Restore basic data
             app_state['data'] = saved_state.get('data', {})
             app_state['kp_id_to_title'] = saved_state.get('kp_id_to_title', {})
+            app_state['kp_id_to_title_rus'] = saved_state.get('kp_id_to_title_rus', {})
             
             # Recreate rezka instance if URL exists
             if saved_state.get('rezka_url'):
@@ -191,9 +197,9 @@ def rem_from_fav():
     })
     return jsonify(feed_response)
 
-@app.route("/process_item/", strict_slashes=False)
+@app.route("/rezka/process_item/", strict_slashes=False)
 @cache.cached(query_string=True)
-def process_item():
+def rezka_process_item():
     response_template = load_json("templates/search_result_page.json")
     url = request.args.get("url")
     if request.args.get("e"):
@@ -244,7 +250,7 @@ def handle_season(response_template, url):
         response_template["channels"].append(create_channel_item(
             title=f"Эпизод {episode_number}",
             icon=url_for("resources", res="film.png", _external=True),
-            playlist_url=f"{request.host_url}process_item?url={url}&translation={request.args.get('translation')}"
+            playlist_url=f"{request.host_url}rezka/process_item?url={url}&translation={request.args.get('translation')}"
                         f"&s={request.args.get('s')}&e={episode_number}"
         ))
     
@@ -280,7 +286,7 @@ def handle_translation(response_template, url):
         response_template["channels"].append(create_channel_item(
             title=f"Сезон {season}",
             icon=url_for("resources", res="series.png", _external=True),
-            playlist_url=f"{request.host_url}process_item?url={url}&translation={request.args.get('translation')}&s={season}"
+            playlist_url=f"{request.host_url}rezka/process_item?url={url}&translation={request.args.get('translation')}&s={season}"
         ))
     
     return jsonify(response_template)
@@ -294,7 +300,7 @@ def handle_url(response_template, url):
         response_template["channels"].append(create_channel_item(
             title=tr_name if tr_name else "По умолчанию",
             icon=url_for("resources", res="series.png", _external=True),
-            playlist_url=f"{request.host_url}process_item?url={url}&translation={tr_id}"
+            playlist_url=f"{request.host_url}rezka/process_item?url={url}&translation={tr_id}"
         ))
     
     return jsonify(response_template)
@@ -327,20 +333,23 @@ def mark_watched():
 def resources(res):
     return send_file("res/" + res, as_attachment=True)
 
-# Turbo CDN parser routes
-@app.route("/turbo/search", strict_slashes=False)
+# Kinopoisk search route
+@app.route("/search", strict_slashes=False)
 def turbo_search():
     search_data = load_json("templates/search_result_page.json")
     balancers_api = VideoBalancersApi.VideoBalancersApi()
     search_result = balancers_api.search(request.args.get("search"))    
 
-    # Ensure mapping exists
+    # Ensure mappings exist
     if 'kp_id_to_title' not in app_state:
         app_state['kp_id_to_title'] = {}
+    if 'kp_id_to_title_rus' not in app_state:
+        app_state['kp_id_to_title_rus'] = {}
 
     for item in search_result["films"]:
-        # Store mapping for later use
-        app_state['kp_id_to_title'][str(item['filmId'])] = item['nameEn'] + " " + item['year'] if item.get("nameEn") else item['nameRu']
+        # Store both English and Russian mappings for later use
+        app_state['kp_id_to_title'][str(item['filmId'])] = item['nameEn'] + " " + item['year'] if item.get("nameEn") else item.get('nameRu', '')
+        app_state['kp_id_to_title_rus'][str(item['filmId'])] = item['nameRu'] + " " + item['year'] if item.get('nameRu') else item.get('nameEn', '')
         print(item)
         description_text = item["description"] if item.get("description") else ""
         if description_text:
@@ -366,206 +375,58 @@ def turbo_search():
             title=item['nameRu'] if item.get("nameRu") else item['nameEn'],
             icon=url_for("resources", res="film.png", _external=True),
             description=description,
-            playlist_url=f"{request.host_url}turbo/process_item?id={item['filmId']}",  # No title in URL
+            playlist_url=f"{request.host_url}process_item?id={item['filmId']}",  # No title in URL
             menu=[{
                 "title": "В избранное", 
-                "playlist_url": f"{request.host_url}add_to_fav?url={request.host_url}turbo/process_item?id={item['filmId']}"
+                "playlist_url": f"{request.host_url}add_to_fav?url={request.host_url}process_item?id={item['filmId']}"
             }]
         ))
     
     return jsonify(search_data)
 
-@app.route("/turbo/process_item", strict_slashes=False)
-def turbo_process_item():
+@app.route("/process_item", strict_slashes=False)
+def process_item():
     response_template = load_json("templates/search_result_page.json")
-    
-    if request.args.get("trs"):
-        return handle_turbo_series_translation(
-            response_template, 
-            request.args.get("id"),
-            request.args.get("s"),
-            request.args.get("e"),
-            request.args.get("trs")
-        )
-    elif request.args.get("e"):
-        return handle_turbo_episode(
-            response_template,
-            request.args.get("id"),
-            request.args.get("s"),
-            request.args.get("e")
-        )
-    elif request.args.get("s"):
-        return handle_turbo_season(
-            response_template,
-            request.args.get("id"),
-            request.args.get("s")
-        )
-    elif request.args.get("tr"):
-        return handle_turbo_translation(
-            response_template,
-            request.args.get("id"),
-            request.args.get("tr")
-        )
-    elif request.args.get("source"):
-        return handle_turbo_cdn(
-            response_template,
-            request.args.get("source")
-        )
-    elif request.args.get("id"):
-        return handle_turbo_id(
-            response_template,
-            request.args.get("id")
-        )
+    if not request.args.get("source"):
+        kp_id = request.args.get("id")
+        # Use title from mapping if needed
+        title = app_state.get('kp_id_to_title', {}).get(str(kp_id))
+        query_params = {
+            "query": title,
+            "kp_id": kp_id
+        }
+        
+        providers = VideoBalancersApi.VideoBalancersApi(kp_id).get_providers(query_params)
+        
+        for provider in providers:
+            response_template["channels"].append(create_channel_item(
+                title=provider.capitalize(), 
+                icon=url_for("resources", res="film.png", _external=True),
+                playlist_url=f"{clean_url_from_unwanted_params(request.url)}&source={provider}"
+            ))
+        return response_template
+    else:
+        source = request.args.get("source")
+        return handle_cdn(response_template, source)
 
-def handle_turbo_cdn(response_template, cdn_name):
+
+def handle_cdn(response_template, cdn_name):
     """Handle CDN source selection."""
     kp_id = request.args.get("id")
-    # Use title from mapping if needed
     title = app_state.get('kp_id_to_title', {}).get(str(kp_id))
     query_params = {
         "query": title,
         "kp_id": kp_id
     }
-    
     app_state["balancers_api"] = VideoBalancersApi.VideoBalancersApi(
         kp_id
     ).get_provider(cdn_name, query_params)
     if cdn_name == "hdRezka":
-        return redirect(f"{request.host_url}process_item?url={app_state['balancers_api'].url}", 302)
+        return redirect(f"{request.host_url}rezka/process_item?url={app_state['balancers_api'].url}", 302)
     elif cdn_name == "rutracker":
         return redirect(f"{request.host_url}/tracker/process_item?kp_id={kp_id}", 302)
-        
-    
-    if hasattr(app_state["balancers_api"], 'getSeasons'):
-        seasons = app_state["balancers_api"].getSeasons()
-        if seasons:
-            for season in seasons:
-                response_template["channels"].append(create_channel_item(
-                    title=season,
-                    icon=url_for("resources", res="film.png", _external=True),
-                    playlist_url=f"{clean_url_from_unwanted_params(request.url)}&s={season.split(' ')[0] if season.split(' ')[0].isdigit() else season.split(' ')[1]}"
-                ))
-            return jsonify(response_template)
-    
-    translations = app_state["balancers_api"].getTranslations()
-    watched_db = load_json("db.json")
-    
-    for i, translation in enumerate(translations):
-        clean_url = clean_url_from_unwanted_params(request.url)
-        is_watched = any(
-            not ("season" in watched and "episode" in watched)
-            for watched in watched_db["watched"]
-            if watched["url"] == clean_url.split("&")[0]
-        )
-        
-        response_template["channels"].append(create_channel_item(
-            title=f"<s>{translation}</s>" if is_watched else translation,
-            icon=url_for("resources", res="film.png", _external=True),
-            parser=f"{request.host_url}mark_watched?url={clean_url}",
-            playlist_url=f"{clean_url}&tr={i}"
-        ))
-    
-    return jsonify(response_template)
-
-def handle_turbo_id(response_template, kp_id):
-    # Use title from mapping if needed
-    title = app_state.get('kp_id_to_title', {}).get(str(kp_id))
-    query_params = {
-        "query": title,
-        "kp_id": kp_id
-    }
-    
-    providers = VideoBalancersApi.VideoBalancersApi(kp_id).get_providers(query_params)
-    
-    for provider in providers:
-        response_template["channels"].append(create_channel_item(
-            title=provider.capitalize(), 
-            icon=url_for("resources", res="film.png", _external=True),
-            playlist_url=f"{clean_url_from_unwanted_params(request.url)}&source={provider}"
-        ))
-    
-    return jsonify(response_template)
-
-def handle_turbo_translation(response_template, kp_id, tr_index):
-    """Handle translation selection for movies."""
-    if not app_state.get("balancers_api"):
-        app_state["balancers_api"] = VideoBalancersApi.VideoBalancersApi(kp_id).get_provider(
-            request.args.get("source"))
-    streams = app_state["balancers_api"].getStreams(int(tr_index))
-    search_title = app_state.get('kp_id_to_title', {}).get(str(kp_id), "Unknown")
-    for quality, stream_url in streams:
-        response_template["channels"].append(create_channel_item(
-            title=f"{search_title} {quality}",
-            icon=url_for("resources", res="film.png", _external=True),
-            stream_url=f"{request.host_url}turbo/redir?url={stream_url}"
-        ))
-    return jsonify(response_template)
-
-def handle_turbo_season(response_template, kp_id, season):
-    """Handle season selection for series."""
-    if not app_state.get("balancers_api"):
-        app_state["balancers_api"] = VideoBalancersApi.VideoBalancersApi(kp_id).get_provider(
-            request.args.get("source"))
-    
-    episodes = app_state["balancers_api"].getEpisodes(int(season))
-    watched_db = load_json("db.json")
-    
-    clean_url = clean_url_from_unwanted_params(request.url)
-    for episode in episodes:
-        ep_num = episode.split(" ")[0] if episode.split(" ")[0].isdigit() else episode.split(" ")[1]
-        is_watched = any(
-            item for item in watched_db["watched"]
-            if (item["url"] == clean_url.split("&")[0] and
-                item.get("season") == request.args["s"] and
-                item.get("episode") == ep_num)
-        )
-        
-        response_template["channels"].append(create_channel_item(
-            title=f"<s>{episode}</s>" if is_watched else episode,
-            icon=url_for("resources", res="film.png", _external=True),
-            parser=f"{request.host_url}mark_watched?url={clean_url.split('&')[0]}"
-                  f"&season={request.args.get('s')}&episode={ep_num}",
-            playlist_url=f"{clean_url}&e={ep_num}"
-        ))
-    
-    return jsonify(response_template)
-
-def handle_turbo_episode(response_template, kp_id, season, episode):
-    """Handle episode selection for series."""
-    if not app_state.get("balancers_api"):
-        app_state["balancers_api"] = VideoBalancersApi.VideoBalancersApi(kp_id).get_provider(
-            request.args.get("source"))
-    
-    translations = app_state["balancers_api"].getTranslations(int(season), int(episode))
-    clean_url = clean_url_from_unwanted_params(request.url)
-    for translation in translations:
-        response_template["channels"].append(create_channel_item(
-            title=translation,
-            icon=url_for("resources", res="film.png", _external=True),
-            playlist_url=f"{clean_url}&trs={translations.index(translation)}"
-        ))
-    
-    return jsonify(response_template)
-
-def handle_turbo_series_translation(response_template, kp_id, season, episode, tr_index):
-    """Handle series translation streams."""
-    if not app_state.get("balancers_api"):
-        app_state["balancers_api"] = VideoBalancersApi.VideoBalancersApi(kp_id).get_provider(
-            request.args.get("source"))
-    streams = app_state["balancers_api"].getStreams(int(tr_index), int(season), int(episode))
-    for quality, stream_url in streams:
-        response_template["channels"].append(create_channel_item(
-            title=f"{quality}",
-            icon=url_for("resources", res="film.png", _external=True),
-            stream_url=f"{request.host_url}turbo/redir?url={stream_url.replace('https','http')}"
-        ))
-        
-    return jsonify(response_template)
-
-@app.route("/turbo/redir", strict_slashes=False)
-def stream_redirect():
-    """Redirect to the actual stream URL."""
-    return redirect(app_state["balancers_api"].getStream(request.args.get("url")), code=302)    
+    elif cdn_name == "filmach":
+        return redirect(f"{request.host_url}/filmach/process_item?kp_id={kp_id}", 302)
 
 @app.route("/local_videos/", strict_slashes=False)
 @auth_required
@@ -831,7 +692,132 @@ def handle_topic(topic_id: int):
                 stream_url=item["url"].replace("localhost", request.host.split(":")[0] if ":" in request.host else request.host)
             ))
     return jsonify(search_data)
-        
+
+@app.route("/filmach/process_item", strict_slashes=False)
+def process_filmach_item():
+    if request.args.get("video_url"):
+        return handle_filmach_video_url(
+            request.args.get("video_url"),
+            request.args.get("format_id")
+        )
+    elif request.args.get("kp_id"):
+        return handle_filmach_search(request.args.get("kp_id"))
+
+def handle_filmach_video_url(video_url, format_id=None):
+    response_template = load_json("templates/search_result_page.json")
+    try:
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+            'cachedir': False,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+
+        formats = info.get('formats', []) or []
+        if format_id is None:
+            m3u8_formats = [
+                fmt for fmt in formats
+                if fmt.get('url') and fmt.get('format_id') and 'm3u8' in str(fmt.get('format_id')).lower()
+            ]
+            grouped_formats = {}
+            for fmt in m3u8_formats:
+                key = (
+                    int(fmt.get('height') or 0),
+                    int(fmt.get('width') or 0),
+                    int(fmt.get('fps') or 0),
+                    fmt.get('format_note') or ''
+                )
+                current = grouped_formats.get(key)
+                if not current or float(fmt.get('tbr') or 0) > float(current.get('tbr') or 0):
+                    grouped_formats[key] = fmt
+
+            playable_formats = sorted(
+                grouped_formats.values(),
+                key=lambda fmt: (
+                    int(fmt.get('height') or 0),
+                    int(fmt.get('width') or 0),
+                    float(fmt.get('tbr') or 0)
+                ),
+                reverse=True
+            )
+
+            for fmt in playable_formats:
+                height = fmt.get('height')
+                width = fmt.get('width')
+                fps = fmt.get('fps')
+                quality_label = f"{height}p" if height else "Unknown"
+                if fps:
+                    quality_label += f" {fps}fps"
+                if fmt.get('format_note'):
+                    quality_label += f" {fmt['format_note']}"
+
+                description = f"{quality_label}<br>Format: {fmt.get('format_id')}<br>Размер: {fmt.get('filesize', fmt.get('filesize_approx', 0))}"
+                response_template['channels'].append(create_channel_item(
+                    title=quality_label,
+                    icon=url_for("resources", res="film.png", _external=True),
+                    description=description,
+                    playlist_url=(
+                        f"{request.host_url}filmach/process_item?video_url={quote_plus(video_url)}"
+                        f"&format_id={quote_plus(str(fmt['format_id']))}"
+                    )
+                ))
+            if not playable_formats:
+                response_template.update({
+                    'notify': 'Не удалось найти доступные m3u8-форматы для этого видео.',
+                    'cmd': 'back();'
+                })
+            return jsonify(response_template)
+
+        chosen_format = next(
+            (fmt for fmt in formats if str(fmt.get('format_id')) == str(format_id)),
+            None
+        )
+        if not chosen_format:
+            response_template.update({
+                'notify': 'Выбранный формат не найден.',
+                'cmd': 'back();'
+            })
+            return jsonify(response_template)
+
+        stream_url = chosen_format.get('url')
+        if not stream_url:
+            response_template.update({
+                'notify': 'Не удалось получить URL потока для выбранного качества.',
+                'cmd': 'back();'
+            })
+            return jsonify(response_template)
+
+        title = chosen_format.get('format') or f"{chosen_format.get('height', '?')}p"
+        response_template['channels'].append(create_channel_item(
+            title=f"{title} ({chosen_format.get('format_id')})",
+            icon=url_for("resources", res="film.png", _external=True),
+            stream_url=stream_url
+        ))
+        return jsonify(response_template)
+    except Exception as e:
+        response_template.update({
+            'notify': f'Ошибка получения видео: {e}',
+            'cmd': 'back();'
+        })
+        return jsonify(response_template)
+
+def handle_filmach_search(kp_id):
+    search_data = load_json("templates/search_result_page.json")
+    title = app_state.get('kp_id_to_title_rus', {}).get(str(kp_id)).replace(")", "").replace("(", "")
+    client = FilmachRutube.FilmachRutube()
+    search_result = client.search(title)
+    for item in search_result:
+        description = f'<img style="float: left; padding-right: 15px" src="{item["thumbnail_url"]}">{item["title"]}'
+        search_data["channels"].append(create_channel_item(
+                title=item["title"],
+                icon=url_for("resources", res="film.png", _external=True),
+                description=description,
+                playlist_url=f"{request.host_url}filmach/process_item?video_url={item["video_url"]}"
+            ))
+    return jsonify(search_data)
+
 def initialize_app():
     """Initialize application on startup"""
     print("Initializing application...")

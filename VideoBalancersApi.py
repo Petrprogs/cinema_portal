@@ -30,6 +30,8 @@ class VideoBalancersApi():
             result.append("hdRezka")
         if config.RUTRACKER_USERNAME and config.RUTRACKER_PASSWORD:
             result.append("rutracker")
+        if config.ENABLE_RUTUBE:
+            result.append("filmach")
         return result
 
     def get_provider(self, name, search_data=None):

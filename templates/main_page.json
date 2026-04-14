@@ -9,7 +9,7 @@
             "description": "Поиск по Кинопоиск. Источники потоков: TurboCDN, Vibix, HdRezka",
             "value": "",
             "search_on": "search_on",
-            "playlist_url": "http://94.177.51.191/turbo/search/"
+            "playlist_url": "http://94.177.51.191/search/"
         },
         {
             "title": "Локальные видео",
