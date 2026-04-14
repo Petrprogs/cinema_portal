@@ -747,7 +747,7 @@ def handle_filmach_video_url(video_url, format_id=None):
                 height = fmt.get('height')
                 width = fmt.get('width')
                 fps = fmt.get('fps')
-                quality_label = f"{height}p" if height else "Unknown"
+                quality_label = f"{width}p" if width else "Unknown"
                 if fps:
                     quality_label += f" {fps}fps"
                 if fmt.get('format_note'):
@@ -808,8 +808,8 @@ def handle_filmach_search(kp_id):
     title = app_state.get('kp_id_to_title_rus', {}).get(str(kp_id)).replace(")", "").replace("(", "")
     client = FilmachRutube.FilmachRutube()
     search_result = client.search(title)
-    for item in search_result:
-        description = f'<img style="float: left; padding-right: 15px" src="{item["thumbnail_url"]}">{item["title"]}'
+    for item in search_result[:30]:
+        description = f'<img style="float: left; padding-right: 15px; height: 40%; width: auto" src="{item["thumbnail_url"]}">{item["title"]}'
         search_data["channels"].append(create_channel_item(
                 title=item["title"],
                 icon=url_for("resources", res="film.png", _external=True),
