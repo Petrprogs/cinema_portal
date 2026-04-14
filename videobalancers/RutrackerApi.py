@@ -121,7 +121,7 @@ class Rutracker:
         found = soup.find_all('p', {'class': 'med bold'})
         for tag in found:
             if 'Результатов поиска:' in tag.text:
-                total_found = int(re.findall(': (\d+) \(', tag.text)[0])
+                total_found = int(re.findall(r': (\d+) \(', tag.text)[0])
                 pages = int((total_found / 50) + 1)
                 self.logger.info('{} result(s) on {} page(s) found'.format(total_found, pages))
                 break
@@ -131,7 +131,7 @@ class Rutracker:
             found = soup.find_all('script')
             for script in found:
                 if 'PG_BASE_URL' in script.text:
-                    search_id = re.findall('search_id=(\w+)', script.text)[0]
+                    search_id = re.findall(r'search_id=(\w+)', script.text)[0]
                     self.logger.debug('Search id is {}'.format(search_id))
                     break
 

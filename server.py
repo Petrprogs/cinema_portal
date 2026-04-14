@@ -754,7 +754,8 @@ def handle_topic(topic_id: int):
     description = tracker.get_info(topic_id)
     print(description)
     video_codecs = re.findall(r"(?:Формат\s+)?[Вв]идео\s*:\s*(.+)", description)
-    audio_tracks = re.findall(r"(Аудио\s*\d*\s*:?\s*(?:[A-Za-z]{2,3})(?:\s*:\s*|\s+)(?:[A-Z][-\sA-Z]+\s*)?(.+))", description)
+    audio_tracks = re.findall(r"^(Аудио\s*#?\s*(?:\d+\s*:)?\s*.+)$", description, flags=re.MULTILINE)
+    print(audio_tracks)
     if len(video_codecs) > 0:
         video_codecs = video_codecs[-1].replace("\n", "").strip()
         match = re.match(r'^(\S+)(\s+)?', video_codecs)
@@ -765,7 +766,7 @@ def handle_topic(topic_id: int):
                 video_codecs = video_codecs[len(match.group(0)):]
         
     if len(audio_tracks) > 0:
-        audio_tracks = "<br>".join([item[0].replace("\n", "").strip() for item in audio_tracks])
+        audio_tracks = "<br>".join([item.replace("\n", "").strip() for item in audio_tracks])
     streams = subprocess.run(f'API_PASSWORD="myapipassword" htorrent info -m="{magnet}"', shell=True, capture_output=True).stdout.decode()
     result = []
     lines = streams.strip().split('\n')
