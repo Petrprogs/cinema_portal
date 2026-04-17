@@ -8,8 +8,9 @@ import shutil
 import signal
 import subprocess
 import sys
-from urllib.parse import quote_plus, unquote_plus
+from urllib.parse import quote_plus, unquote_plus, urljoin
 
+import requests
 import yt_dlp
 from flask import (
     Flask,
@@ -19,6 +20,7 @@ from flask import (
     request,
     send_file,
     send_from_directory,
+    stream_with_context,
     url_for,
 )
 from flask_caching import Cache
@@ -42,7 +44,6 @@ cache.init_app(app)
 
 # Global state
 app_state = {
-    'ffmpeg_process': None,
     'data': {},
     'rezka': None,
     'balancers_api': None,
@@ -53,7 +54,6 @@ app_state = {
 def save_app_state():
     """Save app_state to disk"""
     try:
-        # Don't save ffmpeg_process as it can't be serialized
         state_to_save = {
             'data': app_state.get('data', {}),
             'rezka_url': app_state.get('rezka').url if app_state.get('rezka') else None,
@@ -99,6 +99,15 @@ def get_icon(item_type):
     """Return the appropriate icon based on the item type."""
     
     return url_for("resources", res="film.png", _external=True) if item_type == "films" else url_for("resources", res="film.png", _external=True)
+
+def maybe_proxy_stream_url(url):
+    """Return a local HTTP proxy URL for HTTPS streams when enabled."""
+    if not url or not config.ENABLE_HTTP_PROXY_STREAMS:
+        return url
+    if url.startswith("http://") or url.startswith("https://"):
+        return f"{request.host_url}stream_proxy?url={quote_plus(url)}"
+    return url
+
 
 def create_channel_item(title, icon, description=None, playlist_url=None, menu=None, parser=None, stream_url=None, subtitles=None):
     """Create a standardized channel item dictionary."""
@@ -793,7 +802,7 @@ def handle_filmach_video_url(video_url, format_id=None):
         response_template['channels'].append(create_channel_item(
             title=f"{title} ({chosen_format.get('format_id')})",
             icon=url_for("resources", res="film.png", _external=True),
-            stream_url=stream_url
+            stream_url=maybe_proxy_stream_url(stream_url)
         ))
         return jsonify(response_template)
     except Exception as e:
@@ -803,13 +812,67 @@ def handle_filmach_video_url(video_url, format_id=None):
         })
         return jsonify(response_template)
 
+@app.route("/stream_proxy", strict_slashes=False)
+def stream_proxy():
+    target_url = request.args.get('url')
+    if not target_url:
+        return "Missing url", 400
+
+    target_url = unquote_plus(target_url)
+    if not target_url.startswith(("http://", "https://")):
+        return "Invalid url", 400
+
+    headers = {}
+    if request.headers.get('Range'):
+        headers['Range'] = request.headers.get('Range')
+
+    try:
+        resp = requests.get(target_url, headers=headers, stream=True, timeout=(5, 30))
+    except requests.RequestException as e:
+        return jsonify({
+            'notify': f'Ошибка прокси: {e}',
+            'cmd': 'back();'
+        }), 502
+
+    content_type = resp.headers.get('Content-Type', 'application/octet-stream')
+    if target_url.lower().endswith('.m3u8') or 'mpegurl' in content_type.lower():
+        text = resp.content.decode('utf-8', errors='ignore')
+        result_lines = []
+        for line in text.splitlines(True):
+            stripped = line.strip()
+            if stripped and not stripped.startswith('#'):
+                abs_url = urljoin(target_url, stripped)
+                if abs_url.startswith(("http://", "https://")):
+                    abs_url = f"{request.host_url}stream_proxy?url={quote_plus(abs_url)}"
+                result_lines.append(abs_url + ("\n" if line.endswith("\n") else ""))
+            else:
+                result_lines.append(line)
+
+        response = Response(''.join(result_lines), status=200, mimetype=content_type)
+        response.headers['Accept-Ranges'] = resp.headers.get('Accept-Ranges', 'bytes')
+        return response
+
+    def generate():
+        for chunk in resp.iter_content(chunk_size=8192):
+            if chunk:
+                yield chunk
+
+    response = Response(stream_with_context(generate()), status=resp.status_code, mimetype=content_type)
+    if resp.headers.get('Content-Length'):
+        response.headers['Content-Length'] = resp.headers.get('Content-Length')
+    if resp.headers.get('Content-Range'):
+        response.headers['Content-Range'] = resp.headers.get('Content-Range')
+    response.headers['Accept-Ranges'] = resp.headers.get('Accept-Ranges', 'bytes')
+    return response
+
+
 def handle_filmach_search(kp_id):
     search_data = load_json("templates/search_result_page.json")
     title = app_state.get('kp_id_to_title_rus', {}).get(str(kp_id)).replace(")", "").replace("(", "")
     client = FilmachRutube.FilmachRutube()
     search_result = client.search(title)
     for item in search_result[:30]:
-        description = f'<img style="float: left; padding-right: 15px; height: 40%; width: auto" src="{item["thumbnail_url"]}">{item["title"]}'
+        description = f'<img style="float: left; padding-right: 15px; height: 40%; width: auto" src="{item["thumbnail_url"]}"><br>{item["title"]}'
         search_data["channels"].append(create_channel_item(
                 title=item["title"],
                 icon=url_for("resources", res="film.png", _external=True),
@@ -823,22 +886,18 @@ def initialize_app():
     print("Initializing application...")
     load_app_state()
     
-    os.makedirs(config.FFMPEG_OUTPUT_DIR, exist_ok=True)
-    
     print("Application initialized")
 
 def shutdown_handler(signum=None, frame=None):
     """Handle server shutdown gracefully"""
     print("Shutting down, saving app state...")
     save_app_state()
-    if app_state['ffmpeg_process']:
-        app_state['ffmpeg_process'].kill()
     sys.exit()
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001)
 
 initialize_app()
 atexit.register(shutdown_handler)
 signal.signal(signal.SIGINT, shutdown_handler)
 signal.signal(signal.SIGTERM, shutdown_handler)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5001)

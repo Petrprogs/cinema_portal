@@ -20,4 +20,6 @@ RUTRACKER_PASSWORD = "strongpassword"
 
 KINOPOISK_API_KEY = "api_key_here"
 
+ENABLE_HTTP_PROXY_STREAMS = False
+
 ENABLE_RUTUBE = False

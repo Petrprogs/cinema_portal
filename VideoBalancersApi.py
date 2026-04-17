@@ -36,6 +36,5 @@ class VideoBalancersApi():
 
     def get_provider(self, name, search_data=None):
         if search_data:
-            print("Return rezka")
             return HdRezkaApi.HdRezkaApi('', search_data, config.REZKA_EMAIL, config.REZKA_PASSWORD)
         return None
