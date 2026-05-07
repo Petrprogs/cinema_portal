@@ -32,6 +32,8 @@ class VideoBalancersApi():
             result.append("rutracker")
         if config.ENABLE_RUTUBE:
             result.append("filmach")
+        if config.ENABLE_VKVIDEO:
+            result.append("vkvideo")
         return result
 
     def get_provider(self, name, search_data=None):
