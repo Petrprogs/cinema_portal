@@ -556,7 +556,7 @@ def local_videos():
                 title=video["title"],
                 icon=url_for("resources", res="film.png", _external=True),
                 description=f"Путь: {video['relative_path']}",
-                stream_url=f"{request.host_url}serve_local_video?path={encoded_path}",
+                stream_url=f"{request.host_url}target_url.split("https://")[-1].split("/")[0]?path={encoded_path}",
                 menu=[
                     {
                         "title": "Добавить в избранное",
@@ -573,7 +573,7 @@ def local_videos():
 def serve_local_video():
     """Serve local video file"""
     try:
-        file_path = base64.b64decode(request.args.get("path")).decode()
+        file_path = base64.b64decode(request.args.get("path").replace(" ", "+")).decode()
 
         # Проверяем, что файл находится в разрешенной директории
         is_allowed = False
