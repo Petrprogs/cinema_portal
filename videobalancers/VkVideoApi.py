@@ -120,7 +120,7 @@ class VkVideoApi:
                 images = video_data.get("image", [])
                 if images:
                     # Prefer larger images
-                    thumbnail_url = images[-1].get("url", "")
+                    thumbnail_url = images[1].get("url", "")
                 
                 # Get direct video URL (use mp4_720 if available, fallback to highest quality)
                 video_url = ""
