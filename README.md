@@ -61,3 +61,22 @@ Flask-бэкенд для Forkplayer: поиск через Kinopoisk API, по�
 - `python server.py`
 
 Зависимости (`requirements.txt`): Flask, Flask-CORS, Flask-Caching, requests, beautifulsoup4, lxml, curl_cffi, yt-dlp.
+
+---
+
+## Docker (быстрое развёртывание)
+
+Требуется Python >=3.12 в образе (в `server.py` есть вложенные кавычки в f-строках, PEP 701) — в `Dockerfile` уже `python:3.12-slim` + ffmpeg.
+
+```bash
+cp config.py.example config.py   # заполнить креды/ключи
+cp db.json.example db.json
+mkdir -p videos hls_output       # videos — локальные фильмы с хоста
+# В config.py для контейнера: LOCAL_VIDEO_DIRS = ["/videos"]
+docker compose up --build -d
+curl "http://127.0.0.1:5001/?box_mac=test"
+```
+
+- Порт: `5001`. Конфиг/данные (`config.py`, `db.json`, `app_state.json`, `hls_output/`) подмонтированы из корня проекта — персистентны, в git не коммитятся.
+- Без монтирования контейнер сам создаст `config.py`/`db.json` из примеров (для проверки, не для продакшена).
+- Остановка: `docker compose down`.

@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.git/
+.gitignore
+.vscode/
+.idea/
+hls_output/
+*.log
+app_state.json
+db.json
+config.py
+rezka_cookies
+rt_cookies.txt
+videos/

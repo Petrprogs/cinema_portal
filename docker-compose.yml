@@ -1,0 +1,16 @@
+services:
+  cinema_portal:
+    build: .
+    image: cinema-portal:latest
+    container_name: cinema_portal
+    ports:
+      - "5001:5001"
+    volumes:
+      # Конфиг и данные — персистентно на хосте (не коммитятся в git)
+      - ./config.py:/app/config.py
+      - ./db.json:/app/db.json
+      - ./app_state.json:/app/app_state.json
+      - ./hls_output:/app/hls_output
+      # Локальное видео с хоста (read-only). В config.py: LOCAL_VIDEO_DIRS = ["/videos"]
+      - ./videos:/videos:ro
+    restart: unless-stopped
