@@ -113,15 +113,12 @@ rezka_cookies
 !search_result_page.json
 !soundcloud.json
 !decoded.json
+!db.json.example
 hls_output/
-index.js
-.vscode
 
 # Logs
 *.log
 
-# Waitress
-waitress_server.py
-vscode
+# Local secrets / user data (never commit)
 config.py
 rt_cookies.txt

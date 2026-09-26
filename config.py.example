@@ -17,6 +17,7 @@ LOCAL_VIDEO_DIRS = [
 
 RUTRACKER_USERNAME = "username"
 RUTRACKER_PASSWORD = "strongpassword"
+RUTRACKER_PROXY = ""
 
 KINOPOISK_API_KEY = "api_key_here"
 
